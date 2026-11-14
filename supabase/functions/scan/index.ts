@@ -23,7 +23,8 @@ Règles :
 - confiance : « haute », « moyenne » ou « basse » selon la lisibilité.
 - categorie : une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre.
 - cle_produit : identifiant normalisé pour reconnaître le même produit d'un magasin à l'autre : marque, nom générique et format, en minuscules sans accents (ex. « lactantia beurre sale 454 g »).
-Si aucune carte de prix n'est lisible, renvoie une liste vide.`;
+Réponds toujours en appelant l'outil enregistrer_cartes, une seule fois, avec toutes les cartes lues.
+Si aucune carte de prix n'est lisible, appelle-le avec une liste vide.`;
 
 const texte = { type: ["string", "null"] };
 const nombre = { type: ["number", "null"] };
@@ -82,7 +83,6 @@ Deno.serve(async (req) => {
         max_tokens: 2000,
         system: CONSIGNES,
         tools: [OUTIL],
-        tool_choice: { type: "tool", name: OUTIL.name },
         messages: [{
           role: "user",
           content: [
