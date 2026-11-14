@@ -164,6 +164,15 @@ main.chatmain { display: flex; flex-direction: column; padding-bottom: 8px; }
 .chatbar button { flex: 0 0 40px; width: 40px; min-height: 40px; padding: 0; border-radius: 50%; border: 0; background: var(--accent); color: #fff; }
 @media (prefers-color-scheme: dark) { .chatbar button { color: #04201d; } }
 .chatbar button svg.i { width: 20px; height: 20px; }
+.chatbar .joindre { flex: 0 0 40px; width: 40px; height: 40px; margin: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--muted); cursor: pointer; }
+.chatbar .joindre:active { color: var(--accent); }
+.chatbar .joindre input { display: none; }
+.chatbar textarea { padding-left: 4px; }
+.apercu { position: relative; display: inline-block; margin: 0 0 8px 6px; }
+.apercu img { display: block; height: 76px; border-radius: 12px; box-shadow: var(--shadow); }
+.apercu button { position: absolute; top: -8px; right: -8px; width: 26px; min-height: 26px; padding: 0; border-radius: 50%; border: 0; background: var(--text); color: var(--bg); }
+.apercu button svg.i { width: 14px; height: 14px; stroke-width: 2.4; }
+.bub img { display: block; max-width: 100%; max-height: 220px; border-radius: 10px; margin-bottom: 8px; }
 .pbc { text-align: center; font-size: 11px; color: var(--muted); padding: 6px 0 0; }
 
 /* Fenêtres du bas (édition, nouvelle visite) */

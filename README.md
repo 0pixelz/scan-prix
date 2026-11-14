@@ -13,7 +13,7 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 3. Toucher une ligne pour **corriger** (la photo originale est affichée). Les lectures incertaines
    portent la mention « à vérifier ».
 4. **Excel** : exporte la visite en cours ; l'onglet Visites exporte une visite précise ou toutes les visites.
-5. **Assistant** : onglet de discussion avec Claude pour résumer une visite, trouver les promos, comparer les visites ou corriger un prix.
+5. **Assistant** : onglet de discussion avec Claude pour résumer une visite, trouver les promos, comparer les visites ou corriger un prix. On peut aussi lui envoyer la photo d'une carte : il la lit et ajoute le prix.
 
 ## Installation
 

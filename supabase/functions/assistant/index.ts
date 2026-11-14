@@ -1,4 +1,5 @@
-// Fonction Edge : assistant Claude de Scan Prix (consulte, compare et corrige les prix scannés).
+// Fonction Edge : assistant Claude de Scan Prix (consulte, compare et corrige les prix scannés,
+// et lit une photo de carte de prix jointe au message).
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
@@ -6,6 +7,7 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 const MODEL = Deno.env.get("ANTHROPIC_ASSISTANT_MODEL") || "claude-haiku-5-5";
+const MODEL_PHOTO = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5"; // lecture de photo : modèle plus précis
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 
 const CHAMPS = {
@@ -22,6 +24,7 @@ const CHAMPS = {
   code_article: { type: "string" },
   prix_unitaire: { type: "string" },
   notes: { type: "string" },
+  confiance: { type: "string", enum: ["haute", "moyenne", "basse"], description: "Lisibilité d'une lecture de photo" },
 };
 const NOMS_CHAMPS = Object.keys(CHAMPS);
 
@@ -48,7 +51,7 @@ const OUTILS = [
   },
   {
     name: "ajouter_prix",
-    description: "Ajoute un prix à la main dans une visite (la visite en cours par défaut).",
+    description: "Ajoute un prix dans une visite (la visite en cours par défaut) : prix dicté, ou carte lue sur la photo jointe. Un appel par carte de prix.",
     input_schema: { type: "object", properties: { visite_id: { type: "string" }, ...CHAMPS }, required: ["produit", "prix_regulier"] },
   },
   {
@@ -92,7 +95,27 @@ Règles :
 - Prix au format québécois (3,99 $). Pour une offre multiple, donne aussi le prix à l'unité.
 - Appuie-toi toujours sur les outils pour les données ; n'invente jamais un prix.
 - Par défaut, les questions portent sur la visite en cours. Cherche dans toutes les visites pour les comparaisons.
-- Avant de supprimer, demande une confirmation. Après une modification, confirme en une phrase ce qui a changé.`;
+- Avant de supprimer, demande une confirmation. Après une modification, confirme en une phrase ce qui a changé.
+Quand une photo est jointe :
+- Lis chaque carte de prix visible. Sauf demande contraire, ajoute chacune à la visite en cours avec ajouter_prix, puis résume ce qui a été ajouté (produit, format, prix, promo).
+- N'invente rien : un champ illisible ou absent est omis. Indique confiance « moyenne » ou « basse » si la lecture est incertaine, et dis-le dans ta réponse.
+- prix_regulier : prix courant à l'unité. Offre « 2 pour 5,00 $ » : prix_promo = 5.00 et promo_quantite = 2. Promo simple : promo_quantite = 1.
+- Dates AAAA-MM-JJ (année du jour si elle n'est pas imprimée). cup : chiffres du code-barres seulement. prix_unitaire : tel qu'affiché (« 1,25 $ / 100 g »).
+- Si aucune carte n'est lisible, dis-le et n'ajoute rien.`;
+
+    // Photo jointe au dernier message : envoyée à Claude, et conservée si un prix en est tiré.
+    const base64 = typeof body.image === "string" ? body.image.replace(/^data:image\/\w+;base64,/, "") : "";
+    let photoPath: string | null | undefined;
+    async function photo(): Promise<string | null> {
+      if (!base64) return null;
+      if (photoPath === undefined) {
+        photoPath = `cartes/${crypto.randomUUID()}.jpg`;
+        const octets = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        const { error } = await sb.storage.from("photos").upload(photoPath, octets, { contentType: "image/jpeg" });
+        if (error) photoPath = null;
+      }
+      return photoPath;
+    }
 
     let modifie = false;
 
@@ -123,7 +146,7 @@ Règles :
         case "ajouter_prix": {
           const visite_id = typeof a.visite_id === "string" ? a.visite_id : body.visiteId;
           if (!visite_id) return { erreur: "Aucune visite en cours." };
-          const { data, error } = await sb.from("scans").insert({ ...champs(), visite_id, confiance: "haute" }).select("id").single();
+          const { data, error } = await sb.from("scans").insert({ confiance: "haute", ...champs(), visite_id, photo_path: await photo() }).select("id").single();
           if (error) return { erreur: error.message };
           modifie = true;
           return { ok: true, id: data.id };
@@ -151,11 +174,18 @@ Règles :
 
     // deno-lint-ignore no-explicit-any
     const messages: any[] = historique;
+    const dernier = messages[messages.length - 1];
+    if (base64 && dernier.role === "user") {
+      dernier.content = [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
+        { type: "text", text: dernier.content },
+      ];
+    }
     for (let tour = 0; tour < 8; tour++) {
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": cle, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: MODEL, max_tokens: 1500, system: systeme, tools: OUTILS, messages }),
+        body: JSON.stringify({ model: base64 ? MODEL_PHOTO : MODEL, max_tokens: 2000, system: systeme, tools: OUTILS, messages }),
       });
       const rep = await r.json();
       if (!r.ok) return json({ error: `Assistant indisponible : ${rep?.error?.message ?? r.status}` });

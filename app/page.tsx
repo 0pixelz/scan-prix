@@ -14,7 +14,7 @@ const SUGGESTIONS = [
 ];
 
 type Onglet = "scan" | "assistant" | "visites";
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; content: string; image?: string };
 
 const argent = (v: number | null) =>
   v === null ? "—" : Number(v).toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
@@ -58,6 +58,7 @@ const IAssistant = () => <Icone d={["M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-
 const IMagasin = () => <Icone d={["M4 9l1.2-5h13.6L20 9", "M4 9v11h16V9", "M4 9a2.7 2.7 0 0 0 5.33 0 2.7 2.7 0 0 0 5.34 0A2.7 2.7 0 0 0 20 9", "M9.5 20v-5h5v5"]} />;
 const IEnvoyer = () => <Icone d={["M12 19V5", "M6 11l6-6 6 6"]} />;
 const IPlus = () => <Icone d={["M12 5v14", "M5 12h14"]} />;
+const IFermer = () => <Icone d={["M6 6l12 12", "M18 6L6 18"]} />;
 const IExport = () => <Icone d={["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M5 20h14"]} />;
 
 export default function Page() {
@@ -311,21 +312,34 @@ function App() {
 function Assistant({ visite, modifie }: { visite: Visite | null; modifie: () => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [texte, setTexte] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
   const [attente, setAttente] = useState(false);
   const fin = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { fin.current?.scrollIntoView({ block: "end" }); }, [messages, attente]);
+  useEffect(() => { fin.current?.scrollIntoView({ block: "end" }); }, [messages, attente, photo]);
+
+  async function joindre(files: FileList | null) {
+    if (!files?.length) return;
+    try { setPhoto(await reduire(files[0])); } catch { /* photo illisible : on ignore */ }
+  }
 
   async function envoyer(contenu: string) {
-    const question = contenu.trim();
+    const image = photo;
+    const question = contenu.trim() || (image ? "Lis cette carte de prix et ajoute les informations à la visite en cours." : "");
     if (!question || attente) return;
-    const suite: Message[] = [...messages, { role: "user", content: question }];
+    const suite: Message[] = [...messages, { role: "user", content: question, ...(image ? { image } : {}) }];
     setMessages(suite);
     setTexte("");
+    setPhoto(null);
     setAttente(true);
     try {
       const { data: json, error } = await supabaseBrowser().functions.invoke("assistant", {
-        body: { messages: suite, visiteId: visite?.id },
+        body: {
+          // Les photos des messages précédents ne sont pas renvoyées : seule la nouvelle l'est.
+          messages: suite.map((m) => ({ role: m.role, content: m.image ? `[Photo jointe] ${m.content}` : m.content })),
+          visiteId: visite?.id,
+          image: image ?? undefined,
+        },
       });
       if (error) throw new Error("Assistant indisponible. Réessaie dans un instant.");
       if (json.error) throw new Error(json.error);
@@ -345,26 +359,41 @@ function Assistant({ visite, modifie }: { visite: Visite | null; modifie: () => 
           <div className="hero">
             <div className="logo"><IAssistant /></div>
             <h3>Comment puis-je t'aider ?</h3>
-            <div className="muted">Pose une question sur tes prix, ou demande une correction.</div>
+            <div className="muted">Pose une question sur tes prix, ou envoie la photo d'une carte de prix.</div>
             <div className="herogrid">
               {SUGGESTIONS.map((s) => <button key={s} onClick={() => envoyer(s)}>{s}</button>)}
             </div>
           </div>
         )}
-        {messages.map((m, i) => <div key={i} className={`bub ${m.role === "user" ? "me" : "ai"}`}>{m.content}</div>)}
+        {messages.map((m, i) => (
+          <div key={i} className={`bub ${m.role === "user" ? "me" : "ai"}`}>
+            {m.image && <img src={m.image} alt="Photo jointe" />}
+            {m.content}
+          </div>
+        ))}
         {attente && <div className="bub typing">Claude réfléchit…</div>}
         <div ref={fin} />
       </div>
       <div className="chatfoot">
+        {photo && (
+          <div className="apercu">
+            <img src={photo} alt="Photo à envoyer" />
+            <button type="button" aria-label="Retirer la photo" onClick={() => setPhoto(null)}><IFermer /></button>
+          </div>
+        )}
         <form className="chatbar" onSubmit={(e) => { e.preventDefault(); envoyer(texte); }}>
+          <label className="joindre" aria-label="Joindre une photo">
+            <ICamera />
+            <input type="file" accept="image/*" onChange={(e) => { joindre(e.target.files); e.target.value = ""; }} />
+          </label>
           <textarea
             rows={1}
             value={texte}
-            placeholder="Écris ta question…"
+            placeholder={photo ? "Ajoute une consigne (facultatif)…" : "Écris ta question…"}
             onChange={(e) => setTexte(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(texte); } }}
           />
-          <button aria-label="Envoyer" disabled={attente || !texte.trim()}><IEnvoyer /></button>
+          <button aria-label="Envoyer" disabled={attente || (!texte.trim() && !photo)}><IEnvoyer /></button>
         </form>
         <div className="pbc">Propulsé par Claude</div>
       </div>
