@@ -20,7 +20,7 @@ Stack : Next.js, Supabase (connexion, base de données, photos), API Claude, Ver
    Pour se connecter sans courriel de confirmation : Authentication > Sign In / Providers > Email >
    désactiver « Confirm email ».
 2. **Vercel** : importer ce repo et ajouter les variables de `.env.example`
-   (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`).
+   (seule `ANTHROPIC_API_KEY` est requise : les valeurs Supabase publiques sont dans `.env.production`).
 3. **iPhone** : ouvrir l'URL Vercel dans Safari > Partager > « Sur l'écran d'accueil ».
 4. Créer son compte dans l'app. Ensuite, désactiver les inscriptions dans Supabase
    (Authentication > Sign In / Providers > « Allow new users to sign up ») pour garder l'app privée.
