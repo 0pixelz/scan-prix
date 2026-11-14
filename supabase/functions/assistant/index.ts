@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-jeton",
 };
 const MODEL = Deno.env.get("ANTHROPIC_ASSISTANT_MODEL") || "claude-haiku-5-5";
 const MODEL_PHOTO = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5"; // lecture de photo : modèle plus précis
@@ -24,6 +24,8 @@ const CHAMPS = {
   code_article: { type: "string" },
   prix_unitaire: { type: "string" },
   notes: { type: "string" },
+  categorie: { type: "string", description: "Une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre" },
+  cle_produit: { type: "string", description: "Identifiant normalisé : marque, nom générique et format, en minuscules sans accents (ex. « lactantia beurre sale 454 g »)" },
   confiance: { type: "string", enum: ["haute", "moyenne", "basse"], description: "Lisibilité d'une lecture de photo" },
 };
 const NOMS_CHAMPS = Object.keys(CHAMPS);
@@ -60,6 +62,21 @@ const OUTILS = [
     input_schema: { type: "object", properties: { id: { type: "string" }, ...CHAMPS }, required: ["id"] },
   },
   {
+    name: "lister_liste",
+    description: "Liste les produits de la liste à relever (produits à trouver en magasin).",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "ajouter_a_liste",
+    description: "Ajoute un produit à la liste à relever.",
+    input_schema: { type: "object", properties: { nom: { type: "string" }, cup: { type: "string" } }, required: ["nom"] },
+  },
+  {
+    name: "retirer_de_liste",
+    description: "Retire un produit de la liste à relever, par son identifiant.",
+    input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  },
+  {
     name: "supprimer_prix",
     description: "Supprime un prix. À n'utiliser qu'après une confirmation explicite de l'utilisateur.",
     input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
@@ -70,6 +87,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: acces } = await sb.rpc("verifier_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
+    if (!acces) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
     const body = await req.json().catch(() => ({}));
     // deno-lint-ignore no-explicit-any
     const historique = (Array.isArray(body.messages) ? body.messages : [])
@@ -88,7 +107,7 @@ Deno.serve(async (req) => {
     }
 
     const systeme = `Tu es l'assistant de Scan Prix, une app personnelle pour relever des cartes de prix en magasin au Québec.
-Tu aides à consulter, comparer, corriger et résumer les prix scannés, à l'aide des outils fournis.
+Tu aides à consulter, comparer, corriger et résumer les prix scannés, et à gérer la liste des produits à relever, à l'aide des outils fournis.
 Date du jour : ${new Date().toISOString().slice(0, 10)}. Visite en cours : ${visiteTexte}.
 Règles :
 - Réponds en français, de façon brève et directe. Texte simple : pas de markdown, pas d'emoji. Pour une liste, une ligne par élément commençant par « - ».
@@ -129,7 +148,7 @@ Quand une photo est jointe :
         case "chercher_prix": {
           let q = sb
             .from("scans")
-            .select("id, produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, cup, code_article, prix_unitaire, confiance, notes, visites!inner(id, banniere, magasin, date_visite)")
+            .select("id, produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, cup, code_article, prix_unitaire, categorie, confiance, notes, visites!inner(id, banniere, magasin, date_visite)")
             .order("created_at", { ascending: false })
             .limit(Math.min(Number(a.limite) || 100, 300));
           if (typeof a.visite_id === "string") q = q.eq("visite_id", a.visite_id);
@@ -157,6 +176,26 @@ Quand une photo est jointe :
           const { data, error } = await sb.from("scans").update({ ...maj, confiance: "haute" }).eq("id", String(a.id)).select("id");
           if (error) return { erreur: error.message };
           if (!data?.length) return { erreur: "Prix introuvable." };
+          modifie = true;
+          return { ok: true };
+        }
+        case "lister_liste": {
+          const { data, error } = await sb.from("liste_produits").select("id, nom, cup").order("created_at");
+          return error ? { erreur: error.message } : data;
+        }
+        case "ajouter_a_liste": {
+          const nom = typeof a.nom === "string" ? a.nom.trim() : "";
+          if (!nom) return { erreur: "Nom manquant." };
+          const cup = typeof a.cup === "string" ? a.cup.replace(/\D/g, "") || null : null;
+          const { error } = await sb.from("liste_produits").insert({ nom, cup });
+          if (error) return { erreur: error.message };
+          modifie = true;
+          return { ok: true };
+        }
+        case "retirer_de_liste": {
+          const { data, error } = await sb.from("liste_produits").delete().eq("id", String(a.id)).select("id");
+          if (error) return { erreur: error.message };
+          if (!data?.length) return { erreur: "Produit introuvable dans la liste." };
           modifie = true;
           return { ok: true };
         }

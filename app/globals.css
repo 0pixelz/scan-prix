@@ -192,3 +192,62 @@ main.chatmain { display: flex; flex-direction: column; padding-bottom: 8px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .photo { width: 100%; border-radius: 12px; margin-top: 12px; }
 .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+
+/* Cinq onglets */
+nav button { min-width: 0; font-size: 10.5px; }
+
+/* Recherche et filtres */
+.search { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 12px; padding: 0 12px; margin-bottom: 10px; box-shadow: var(--shadow); color: var(--muted); }
+.search input { border: 0; background: transparent; box-shadow: none; padding-left: 0; color: var(--text); }
+.chips { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px 12px; padding: 0 16px 2px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button, .chips select { flex: none; width: auto; min-height: 34px; padding: 6px 12px; font-size: 13px; font-weight: 500; border-radius: 99px; background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
+.chips button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card)); font-weight: 600; }
+
+.alert.avis { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: color-mix(in srgb, var(--warn) 14%, var(--card)); color: var(--warn); }
+.alert.avis button { background: var(--card); color: var(--text); }
+.card.lien { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 12px 16px; }
+.pill.hausse { background: color-mix(in srgb, var(--bad) 14%, var(--card)); color: var(--bad); }
+.pill.baisse { background: color-mix(in srgb, var(--ok) 16%, var(--card)); color: var(--ok); }
+button.icone { width: 36px; min-height: 36px; padding: 0; color: var(--muted); flex: none; }
+button.icone svg.i { width: 18px; height: 18px; }
+
+/* Liste à relever */
+.bar { height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; margin-bottom: 6px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.3s ease; }
+.coche { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: flex; align-items: center; justify-content: center; }
+.coche.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .coche.on { color: #04201d; } }
+.coche svg.i { width: 15px; height: 15px; stroke-width: 2.6; }
+.tx.fait .t { color: var(--muted); text-decoration: line-through; }
+
+/* Comparaison entre bannières */
+.cmp { cursor: pointer; }
+.cmp .t { font-weight: 600; }
+.cmp .s { color: var(--muted); font-size: 12.5px; }
+.cmp .ecart { text-align: right; flex: none; }
+.cmp .ecart b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+.cmp .ecart span { font-size: 12px; color: var(--muted); }
+.bannieres { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 12px; }
+.bannieres > div { background: var(--bg); border-radius: 10px; padding: 8px 10px; border: 1.5px solid transparent; min-width: 0; }
+.bannieres > div.moins { border-color: var(--ok); }
+.bannieres span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bannieres b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+.bannieres > div.moins b { color: var(--ok); }
+.bannieres small { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Écran du code */
+.app.code { align-items: center; justify-content: center; padding: 24px; }
+.codebox { width: 100%; max-width: 300px; text-align: center; }
+.points { display: flex; justify-content: center; gap: 16px; margin: 22px 0 10px; }
+.points span { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
+.points span.plein { background: var(--accent); border-color: var(--accent); }
+.codemsg { min-height: 22px; font-size: 14px; color: var(--bad); margin-bottom: 12px; }
+.clavier { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.clavier button { min-height: 64px; font-size: 24px; font-weight: 600; border-radius: 18px; background: var(--card); border: 0; box-shadow: var(--shadow); }
+.clavier button.ghost { background: transparent; box-shadow: none; color: var(--muted); }
+
+/* Lecteur de code-barres */
+.viseur { position: relative; margin: 12px 0; border-radius: 14px; overflow: hidden; background: #000; aspect-ratio: 4 / 3; }
+.viseur video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.viseur span { position: absolute; left: 10%; right: 10%; top: 35%; bottom: 35%; border: 2px solid #fff; border-radius: 10px; box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.35); }

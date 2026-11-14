@@ -1,0 +1,35 @@
+# Vérifie, après chaque mise à jour, que l'accès est bien protégé et que le navigateur peut envoyer le jeton.
+name: Vérifications
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  acces:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://vfikxkdadiqkducklewv.supabase.co
+      SUPABASE_KEY: sb_publishable_7ChQQ1PKLuvBgo5qcrvFhg_CKlSwK6t
+    steps:
+      - name: Sans jeton, aucune donnée n'est lisible
+        run: |
+          for table in visites scans liste_produits; do
+            rep=$(curl -sS "$SUPABASE_URL/rest/v1/$table?select=id&limit=1" -H "apikey: $SUPABASE_KEY")
+            echo "$table : $rep"
+            [ "$rep" = "[]" ] || { echo "::error::La table $table est lisible sans jeton"; exit 1; }
+          done
+      - name: Sans jeton, les fonctions Claude refusent
+        run: |
+          rep=$(curl -sS -X POST "$SUPABASE_URL/functions/v1/assistant" -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" -d '{"messages":[{"role":"user","content":"test"}]}')
+          echo "$rep"
+          echo "$rep" | grep -q '"acces":false' || { echo "::error::La fonction assistant répond sans jeton"; exit 1; }
+      - name: Le navigateur peut envoyer l'en-tête x-jeton
+        run: |
+          for chemin in "rest/v1/visites?select=id" "functions/v1/scan"; do
+            entetes=$(curl -sS -o /dev/null -D - -X OPTIONS "$SUPABASE_URL/$chemin" -H "Origin: https://exemple.vercel.app" \
+              -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: apikey,authorization,content-type,x-client-info,x-jeton")
+            echo "$entetes" | grep -i "access-control-allow-headers" || true
+            echo "$entetes" | grep -i "access-control-allow-headers" | grep -qiE "x-jeton|\*" || { echo "::error::En-tête x-jeton refusé pour $chemin"; exit 1; }
+          done

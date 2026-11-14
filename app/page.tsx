@@ -1,72 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { configOk, supabaseBrowser } from "@/lib/supabase";
-import type { Scan, Visite } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabase";
+import { correspond, doublons, grouper, normaliser, promoUnitaire, type Groupe } from "@/lib/comparaison";
+import type { ProduitListe, Scan, Visite } from "@/lib/types";
+import Assistant from "./composants/Assistant";
+import Code from "./composants/Code";
+import Comparer from "./composants/Comparer";
+import Liste from "./composants/Liste";
+import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
+import {
+  IAssistant, ICamera, IComparer, IEtiquette, IExport, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  argent, aujourdhui, chargerTout, dateLisible, reduire,
+} from "./composants/ui";
 
-const BANNIERES = ["Metro", "Super C", "IGA", "Maxi", "Provigo", "Walmart", "Costco", "Adonis", "Marché Richelieu", "Tigre Géant", "Pharmaprix", "Jean Coutu"];
-
-const SUGGESTIONS = [
-  "Résume cette visite",
-  "Quels produits sont en promotion ?",
-  "Quels prix sont à vérifier ?",
-  "Compare avec mes autres visites",
-];
-
-type Onglet = "scan" | "assistant" | "visites";
-type Message = { role: "user" | "assistant"; content: string; image?: string };
-
-const argent = (v: number | null) =>
-  v === null ? "—" : Number(v).toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
-
-const aujourdhui = () => new Date().toLocaleDateString("en-CA"); // AAAA-MM-JJ, heure locale
-
-const dateLisible = (d: string) =>
-  new Date(`${d}T12:00:00`).toLocaleDateString("fr-CA", {
-    day: "numeric",
-    month: "short",
-    ...(d.slice(0, 4) === String(new Date().getFullYear()) ? {} : { year: "numeric" }), // année affichée seulement si ce n'est pas l'année en cours
-  });
-
-/** Prix promo ramené à l'unité (2 pour 5 $ -> 2,50 $). */
-const promoUnitaire = (s: Scan) =>
-  s.prix_promo === null ? null : Number(s.prix_promo) / (s.promo_quantite && s.promo_quantite > 1 ? s.promo_quantite : 1);
-
-/** Réduit la photo (max 1568 px) pour un envoi rapide sur réseau cellulaire. */
-async function reduire(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const ratio = Math.min(1, 1568 / Math.max(img.naturalWidth, img.naturalHeight));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(img.naturalWidth * ratio);
-    canvas.height = Math.round(img.naturalHeight * ratio);
-    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.85);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-/* Icônes au trait */
-const Icone = ({ d }: { d: string[] }) => (
-  <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-    {d.map((p) => <path key={p} d={p} />)}
-  </svg>
-);
-const ICamera = () => <Icone d={["M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z", "M12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"]} />;
-const IEtiquette = () => <Icone d={["M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9z", "M7.5 7.5h.01"]} />;
-const IAssistant = () => <Icone d={["M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z", "M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"]} />;
-const IMagasin = () => <Icone d={["M4 9l1.2-5h13.6L20 9", "M4 9v11h16V9", "M4 9a2.7 2.7 0 0 0 5.33 0 2.7 2.7 0 0 0 5.34 0A2.7 2.7 0 0 0 20 9", "M9.5 20v-5h5v5"]} />;
-const IEnvoyer = () => <Icone d={["M12 19V5", "M6 11l6-6 6 6"]} />;
-const IPlus = () => <Icone d={["M12 5v14", "M5 12h14"]} />;
-const IPhotos = () => <Icone d={["M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z", "M3 16l5-5 4 4 3-3 6 6", "M15.5 9.5h.01"]} />;
-const IFermer = () => <Icone d={["M6 6l12 12", "M18 6L6 18"]} />;
-const IExport = () => <Icone d={["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M5 20h14"]} />;
+type Onglet = "scan" | "liste" | "comparer" | "assistant" | "visites";
+type Filtre = "tous" | "promos" | "verifier" | "doublons";
 
 export default function Page() {
+  const [acces, setAcces] = useState<"verification" | "code" | "ouvert">("verification");
+
+  // À l'ouverture : le jeton gardé sur l'appareil est-il encore valide ?
+  useEffect(() => {
+    if (!configOk) return;
+    if (!lireJeton()) return setAcces("code");
+    supabaseBrowser().rpc("jeton_valide").then(({ data, error }) => {
+      if (error) return setAcces("ouvert"); // hors ligne : on laisse entrer, les données resteront protégées par le serveur
+      if (!data) ecrireJeton(null);
+      setAcces(data ? "ouvert" : "code");
+    });
+  }, []);
+
   if (!configOk)
     return (
       <div className="app">
@@ -74,30 +38,38 @@ export default function Page() {
         <main><div className="alert">Configuration manquante : ajoute NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY (voir le README).</div></main>
       </div>
     );
-  return <App />;
+  if (acces === "verification") return <div className="app" />;
+  if (acces === "code") return <Code ouvert={() => setAcces("ouvert")} />;
+  return <App refuse={() => { ecrireJeton(null); setAcces("code"); }} />;
 }
 
-function App() {
+function App({ refuse }: { refuse: () => void }) {
   const sb = supabaseBrowser();
   const [onglet, setOnglet] = useState<Onglet>("scan");
   const [visites, setVisites] = useState<Visite[]>([]);
   const [visite, setVisite] = useState<Visite | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
+  const [liste, setListe] = useState<ProduitListe[]>([]);
   const [enCours, setEnCours] = useState(0);
   const [erreur, setErreur] = useState("");
   const [edition, setEdition] = useState<Scan | null>(null);
+  const [historique, setHistorique] = useState<Groupe | null>(null);
   const [nouvelle, setNouvelle] = useState(false);
   const [exportEnCours, setExportEnCours] = useState(false);
+  const [recherche, setRecherche] = useState("");
+  const [filtre, setFiltre] = useState<Filtre>("tous");
+  const [categorie, setCategorie] = useState("");
+  const [confirmerDoublons, setConfirmerDoublons] = useState(false);
   const visiteRef = useRef<Visite | null>(null);
   visiteRef.current = visite;
 
   // Visites : on reprend la plus récente à l'ouverture
   useEffect(() => {
-    sb.from("visites").select("*").order("created_at", { ascending: false }).limit(100).then(({ data, error }) => {
+    sb.from("visites").select("*").order("created_at", { ascending: false }).limit(200).then(({ data, error }) => {
       if (error) return setErreur(error.message);
-      const liste = (data ?? []) as Visite[];
-      setVisites(liste);
-      if (liste.length) setVisite(liste[0]);
+      const l = (data ?? []) as Visite[];
+      setVisites(l);
+      if (l.length) setVisite(l[0]);
       else setNouvelle(true);
     });
   }, [sb]);
@@ -110,9 +82,15 @@ function App() {
     else if (visiteRef.current?.id === v.id) setScans((data ?? []) as Scan[]);
   }, [sb]);
 
-  useEffect(() => { chargerScans(); }, [chargerScans, visite]);
+  const chargerListe = useCallback(async () => {
+    const { data, error } = await sb.from("liste_produits").select("*").order("created_at");
+    if (error) setErreur(error.message);
+    else setListe((data ?? []) as ProduitListe[]);
+  }, [sb]);
 
-  // Chaque photo part en arrière-plan : on peut enchaîner les cartes sans attendre.
+  useEffect(() => { chargerScans(); }, [chargerScans, visite]);
+  useEffect(() => { chargerListe(); }, [chargerListe]);
+
   // File d'attente : chaque photo est lue en arrière-plan, trois à la fois au maximum
   // (on peut enchaîner les cartes, ou importer d'un coup plusieurs photos déjà prises).
   const file = useRef<{ fichier: File; visiteId: string }[]>([]);
@@ -127,6 +105,7 @@ function App() {
           const image = await reduire(fichier);
           const { data: json, error } = await sb.functions.invoke("scan", { body: { image, visiteId } });
           if (error) throw new Error("Service de lecture indisponible. Réessaie dans un instant.");
+          if (json.acces === false) return refuse();
           if (json.error) throw new Error(json.error);
           if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
           else if (visiteRef.current?.id === visiteId) setScans((s) => [...json.scans, ...s]);
@@ -155,7 +134,8 @@ function App() {
     setExportEnCours(true);
     setErreur("");
     try {
-      const res = await fetch(`/api/export${v ? `?visite=${v.id}` : ""}`);
+      const res = await fetch(`/api/export${v ? `?visite=${v.id}` : ""}`, { headers: { "x-jeton": lireJeton() ?? "" } });
+      if (res.status === 401) return refuse();
       if (!res.ok) throw new Error((await res.json()).error || "Export impossible");
       const blob = await res.blob();
       const nom = v
@@ -179,9 +159,46 @@ function App() {
     }
   }
 
+  async function ouvrirHistorique(s: Scan) {
+    try {
+      const groupe = grouper(await chargerTout(sb)).find((g) => g.observations.some((o) => o.id === s.id));
+      if (groupe) {
+        setEdition(null);
+        setHistorique(groupe);
+      }
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Erreur inconnue");
+    }
+  }
+
+  const enDouble = useMemo(() => doublons(scans), [scans]);
+
+  async function supprimerDoublons() {
+    const ids = [...enDouble];
+    const { error } = await sb.from("scans").delete().in("id", ids);
+    if (error) return setErreur(error.message);
+    setScans((l) => l.filter((s) => !enDouble.has(s.id)));
+    setConfirmerDoublons(false);
+    setFiltre("tous");
+  }
+
   const nbPromos = scans.filter((s) => s.prix_promo !== null).length;
   const nbVerif = scans.filter((s) => s.confiance && s.confiance !== "haute").length;
-  const titres: Record<Onglet, string> = { scan: "Scan Prix", assistant: "Assistant", visites: "Visites" };
+  const categories = [...new Set(scans.map((s) => s.categorie).filter(Boolean))].sort() as string[];
+  const mots = normaliser(recherche).split(" ").filter(Boolean);
+  const visibles = scans.filter((s) => {
+    if (filtre === "promos" && s.prix_promo === null) return false;
+    if (filtre === "verifier" && (!s.confiance || s.confiance === "haute")) return false;
+    if (filtre === "doublons" && !enDouble.has(s.id)) return false;
+    if (categorie && s.categorie !== categorie) return false;
+    if (!mots.length) return true;
+    const texte = normaliser([s.produit, s.marque, s.format, s.cup, s.code_article, s.categorie].filter(Boolean).join(" "));
+    return mots.every((m) => texte.includes(m));
+  });
+  const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Comparer", assistant: "Assistant", visites: "Visites" };
+  const puce = (f: Filtre, libelle: string, n: number) => (
+    <button className={filtre === f ? "on" : ""} onClick={() => setFiltre(f)}>{libelle} ({n})</button>
+  );
 
   return (
     <div className="app">
@@ -230,6 +247,56 @@ function App() {
 
               {enCours > 0 && <div className="alert info">Lecture de {enCours} photo{enCours > 1 ? "s" : ""} en cours…</div>}
 
+              {enDouble.size > 0 && (
+                <div className="alert avis">
+                  <span>{enDouble.size} doublon{enDouble.size > 1 ? "s" : ""} dans cette visite.</span>
+                  {confirmerDoublons ? (
+                    <button className="small danger" onClick={supprimerDoublons}>Confirmer la suppression</button>
+                  ) : (
+                    <span className="row">
+                      <button className="small" onClick={() => setFiltre("doublons")}>Voir</button>
+                      <button className="small" onClick={() => setConfirmerDoublons(true)}>Supprimer</button>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {liste.length > 0 && (
+                <div className="card lien" role="button" onClick={() => setOnglet("liste")}>
+                  <div className="ic soft"><IListe /></div>
+                  <div className="grow">
+                    <b>Liste à relever</b>
+                    <div className="muted">
+                      {(() => {
+                        const reste = liste.filter((p) => !scans.some((s) => correspond(p, s))).length;
+                        return reste ? `${reste} produit${reste > 1 ? "s" : ""} à trouver sur ${liste.length}` : "Tous les produits sont relevés";
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {scans.length > 0 && (
+                <>
+                  <div className="search">
+                    <IRecherche />
+                    <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher un produit, une marque, un code" />
+                  </div>
+                  <div className="chips">
+                    {puce("tous", "Tous", scans.length)}
+                    {puce("promos", "Promos", nbPromos)}
+                    {puce("verifier", "À vérifier", nbVerif)}
+                    {enDouble.size > 0 && puce("doublons", "Doublons", enDouble.size)}
+                    {categories.length > 0 && (
+                      <select value={categorie} onChange={(e) => setCategorie(e.target.value)} aria-label="Catégorie">
+                        <option value="">Toutes les catégories</option>
+                        {categories.map((c) => <option key={c}>{c}</option>)}
+                      </select>
+                    )}
+                  </div>
+                </>
+              )}
+
               <div className="card">
                 <h2>Prix relevés</h2>
                 {!scans.length && (
@@ -239,21 +306,23 @@ function App() {
                     <div className="muted">Photographie une carte de prix, ou importe des photos déjà prises.</div>
                   </div>
                 )}
-                {scans.map((s) => {
+                {scans.length > 0 && !visibles.length && <div className="empty"><div>Aucun prix ne correspond.</div></div>}
+                {visibles.map((s) => {
                   const pu = promoUnitaire(s);
                   return (
                     <div key={s.id} className="tx" role="button" onClick={() => setEdition(s)}>
                       <div className="ic">{(s.produit || "?").trim().charAt(0).toUpperCase()}</div>
                       <div className="mid">
                         <div className="t">{s.produit || "Produit non lu"}</div>
-                        <div className="s">{[s.marque, s.format, s.cup || s.code_article].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+                        <div className="s">{[s.marque, s.format, s.categorie].filter(Boolean).join(" · ") || "Aucun détail"}</div>
                         {s.prix_promo !== null && (
                           <span className="pill promo">
                             {s.promo_quantite && s.promo_quantite > 1 ? `${s.promo_quantite} pour ${argent(s.prix_promo)}` : "Promo"}
                             {s.date_fin ? ` · jusqu'au ${dateLisible(s.date_fin)}` : ""}
                           </span>
                         )}{" "}
-                        {s.confiance && s.confiance !== "haute" && <span className="pill verif">À vérifier</span>}
+                        {s.confiance && s.confiance !== "haute" && <span className="pill verif">À vérifier</span>}{" "}
+                        {enDouble.has(s.id) && <span className="pill verif">Doublon</span>}
                       </div>
                       <div className="r">
                         <b>{argent(pu ?? s.prix_regulier)}</b>
@@ -268,7 +337,11 @@ function App() {
         </main>
       )}
 
-      {onglet === "assistant" && <Assistant visite={visite} modifie={chargerScans} />}
+      {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} />}
+
+      {onglet === "comparer" && <Comparer historique={setHistorique} />}
+
+      {onglet === "assistant" && <Assistant visite={visite} modifie={() => { chargerScans(); chargerListe(); }} refuse={refuse} />}
 
       {onglet === "visites" && (
         <main>
@@ -292,6 +365,7 @@ function App() {
           <button className="full" disabled={exportEnCours || !visites.length} onClick={() => exporter(null)}>
             <IExport /> Exporter toutes les visites
           </button>
+          <button className="full ghost" style={{ marginTop: 10 }} onClick={refuse}>Verrouiller l'app</button>
         </main>
       )}
 
@@ -312,6 +386,8 @@ function App() {
 
       <nav>
         <button className={onglet === "scan" ? "on" : ""} onClick={() => setOnglet("scan")}><IEtiquette />Prix</button>
+        <button className={onglet === "liste" ? "on" : ""} onClick={() => setOnglet("liste")}><IListe />Liste</button>
+        <button className={onglet === "comparer" ? "on" : ""} onClick={() => setOnglet("comparer")}><IComparer />Comparer</button>
         <button className={onglet === "assistant" ? "on" : ""} onClick={() => setOnglet("assistant")}><IAssistant />Assistant</button>
         <button className={onglet === "visites" ? "on" : ""} onClick={() => setOnglet("visites")}><IMagasin />Visites</button>
       </nav>
@@ -329,232 +405,11 @@ function App() {
           fermer={() => setEdition(null)}
           enregistre={(s) => { setScans((l) => l.map((x) => (x.id === s.id ? s : x))); setEdition(null); }}
           supprime={(id) => { setScans((l) => l.filter((x) => x.id !== id)); setEdition(null); }}
+          historique={ouvrirHistorique}
         />
       )}
-    </div>
-  );
-}
 
-function Assistant({ visite, modifie }: { visite: Visite | null; modifie: () => void }) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [texte, setTexte] = useState("");
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [attente, setAttente] = useState(false);
-  const fin = useRef<HTMLDivElement>(null);
-
-  useEffect(() => { fin.current?.scrollIntoView({ block: "end" }); }, [messages, attente, photo]);
-
-  async function joindre(files: FileList | null) {
-    if (!files?.length) return;
-    try { setPhoto(await reduire(files[0])); } catch { /* photo illisible : on ignore */ }
-  }
-
-  async function envoyer(contenu: string) {
-    const image = photo;
-    const question = contenu.trim() || (image ? "Lis cette carte de prix et ajoute les informations à la visite en cours." : "");
-    if (!question || attente) return;
-    const suite: Message[] = [...messages, { role: "user", content: question, ...(image ? { image } : {}) }];
-    setMessages(suite);
-    setTexte("");
-    setPhoto(null);
-    setAttente(true);
-    try {
-      const { data: json, error } = await supabaseBrowser().functions.invoke("assistant", {
-        body: {
-          // Les photos des messages précédents ne sont pas renvoyées : seule la nouvelle l'est.
-          messages: suite.map((m) => ({ role: m.role, content: m.image ? `[Photo jointe] ${m.content}` : m.content })),
-          visiteId: visite?.id,
-          image: image ?? undefined,
-        },
-      });
-      if (error) throw new Error("Assistant indisponible. Réessaie dans un instant.");
-      if (json.error) throw new Error(json.error);
-      setMessages([...suite, { role: "assistant", content: json.reponse }]);
-      if (json.modifie) modifie();
-    } catch (e) {
-      setMessages([...suite, { role: "assistant", content: e instanceof Error ? e.message : "Erreur inconnue" }]);
-    } finally {
-      setAttente(false);
-    }
-  }
-
-  return (
-    <main className="chatmain">
-      <div className="chat">
-        {!messages.length && (
-          <div className="hero">
-            <div className="logo"><IAssistant /></div>
-            <h3>Comment puis-je t'aider ?</h3>
-            <div className="muted">Pose une question sur tes prix, ou envoie la photo d'une carte de prix.</div>
-            <div className="herogrid">
-              {SUGGESTIONS.map((s) => <button key={s} onClick={() => envoyer(s)}>{s}</button>)}
-            </div>
-          </div>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} className={`bub ${m.role === "user" ? "me" : "ai"}`}>
-            {m.image && <img src={m.image} alt="Photo jointe" />}
-            {m.content}
-          </div>
-        ))}
-        {attente && <div className="bub typing">Claude réfléchit…</div>}
-        <div ref={fin} />
-      </div>
-      <div className="chatfoot">
-        {photo && (
-          <div className="apercu">
-            <img src={photo} alt="Photo à envoyer" />
-            <button type="button" aria-label="Retirer la photo" onClick={() => setPhoto(null)}><IFermer /></button>
-          </div>
-        )}
-        <form className="chatbar" onSubmit={(e) => { e.preventDefault(); envoyer(texte); }}>
-          <label className="joindre" aria-label="Joindre une photo">
-            <ICamera />
-            <input type="file" accept="image/*" onChange={(e) => { joindre(e.target.files); e.target.value = ""; }} />
-          </label>
-          <textarea
-            rows={1}
-            value={texte}
-            placeholder={photo ? "Ajoute une consigne (facultatif)…" : "Écris ta question…"}
-            onChange={(e) => setTexte(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); envoyer(texte); } }}
-          />
-          <button aria-label="Envoyer" disabled={attente || (!texte.trim() && !photo)}><IEnvoyer /></button>
-        </form>
-        <div className="pbc">Propulsé par Claude</div>
-      </div>
-    </main>
-  );
-}
-
-function NouvelleVisite({ fermer, creee }: { fermer?: () => void; creee: (v: Visite) => void }) {
-  const [banniere, setBanniere] = useState("");
-  const [magasin, setMagasin] = useState("");
-  const [date, setDate] = useState(aujourdhui());
-  const [erreur, setErreur] = useState("");
-
-  async function creer(e: React.FormEvent) {
-    e.preventDefault();
-    const { data, error } = await supabaseBrowser()
-      .from("visites")
-      .insert({ banniere: banniere.trim(), magasin: magasin.trim() || null, date_visite: date })
-      .select()
-      .single();
-    if (error) setErreur(error.message);
-    else creee(data as Visite);
-  }
-
-  return (
-    <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer?.()}>
-      <form className="panel" onSubmit={creer}>
-        <div className="grip" />
-        <h3>Nouvelle visite</h3>
-        <label>Bannière</label>
-        <input list="bannieres" value={banniere} onChange={(e) => setBanniere(e.target.value)} required placeholder="Ex. IGA" />
-        <datalist id="bannieres">{BANNIERES.map((b) => <option key={b} value={b} />)}</datalist>
-        <label>Magasin (ville, succursale)</label>
-        <input value={magasin} onChange={(e) => setMagasin(e.target.value)} placeholder="Ex. Mirabel" />
-        <label>Date</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
-        <div className="actions">
-          <button className="primary full">Commencer</button>
-          {fermer && <button type="button" className="full" onClick={fermer}>Annuler</button>}
-        </div>
-      </form>
-    </div>
-  );
-}
-
-const CHAMPS_EDITION = ["produit", "marque", "format", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
-
-function Edition({ scan, fermer, enregistre, supprime }: {
-  scan: Scan;
-  fermer: () => void;
-  enregistre: (s: Scan) => void;
-  supprime: (id: string) => void;
-}) {
-  const sb = supabaseBrowser();
-  const [f, setF] = useState<Record<string, string>>(() =>
-    Object.fromEntries(CHAMPS_EDITION.map((k) => [k, (scan as Record<string, unknown>)[k]?.toString() ?? ""])),
-  );
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [erreur, setErreur] = useState("");
-  const [confirmer, setConfirmer] = useState(false);
-
-  useEffect(() => {
-    if (!scan.photo_path) return;
-    sb.storage.from("photos").createSignedUrl(scan.photo_path, 600).then(({ data }) => setPhoto(data?.signedUrl ?? null));
-  }, [sb, scan.photo_path]);
-
-  const champ = (k: string, libelle: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
-    <div>
-      <label>{libelle}</label>
-      <input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} {...props} />
-    </div>
-  );
-
-  async function sauver(e: React.FormEvent) {
-    e.preventDefault();
-    const t = (k: string) => f[k].trim() || null;
-    const n = (k: string) => {
-      const v = parseFloat(f[k].replace(",", "."));
-      return Number.isFinite(v) ? v : null;
-    };
-    const qte = n("promo_quantite");
-    const maj = {
-      produit: t("produit"), marque: t("marque"), format: t("format"),
-      prix_regulier: n("prix_regulier"), prix_promo: n("prix_promo"),
-      promo_quantite: qte === null ? null : Math.trunc(qte),
-      promo_texte: t("promo_texte"), date_debut: t("date_debut"), date_fin: t("date_fin"),
-      cup: t("cup"), code_article: t("code_article"), prix_unitaire: t("prix_unitaire"), notes: t("notes"),
-      confiance: "haute", // vérifié à la main
-    };
-    const { data, error } = await sb.from("scans").update(maj).eq("id", scan.id).select().single();
-    if (error) setErreur(error.message);
-    else enregistre(data as Scan);
-  }
-
-  async function effacer() {
-    const { error } = await sb.from("scans").delete().eq("id", scan.id);
-    if (error) return setErreur(error.message);
-    supprime(scan.id);
-  }
-
-  return (
-    <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer()}>
-      <form className="panel" onSubmit={sauver}>
-        <div className="grip" />
-        <div className="row between">
-          <h3>Modifier le prix</h3>
-          <button type="button" className="ghost" onClick={fermer}>Fermer</button>
-        </div>
-        {champ("produit", "Produit")}
-        <div className="grid2">
-          {champ("marque", "Marque")}
-          {champ("format", "Format")}
-          {champ("prix_regulier", "Prix régulier ($)", { inputMode: "decimal" })}
-          {champ("prix_unitaire", "Prix unitaire affiché")}
-          {champ("prix_promo", "Prix promo ($)", { inputMode: "decimal" })}
-          {champ("promo_quantite", "Quantité promo", { inputMode: "numeric" })}
-        </div>
-        {champ("promo_texte", "Offre")}
-        <div className="grid2">
-          {champ("date_debut", "Début", { type: "date" })}
-          {champ("date_fin", "Fin", { type: "date" })}
-          {champ("cup", "CUP", { inputMode: "numeric" })}
-          {champ("code_article", "Code article")}
-        </div>
-        {champ("notes", "Notes")}
-        {photo && <img className="photo" src={photo} alt="Photo de la carte de prix" />}
-        {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
-        <div className="actions">
-          <button className="primary full">Enregistrer</button>
-          <button type="button" className="danger full" onClick={confirmer ? effacer : () => setConfirmer(true)}>
-            {confirmer ? "Confirmer la suppression" : "Supprimer"}
-          </button>
-        </div>
-      </form>
+      {historique && <Historique groupe={historique} fermer={() => setHistorique(null)} />}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-jeton",
 };
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5";
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
@@ -21,6 +21,8 @@ Règles :
 - cup : uniquement les chiffres du code-barres (CUP/UPC). code_article : numéro d'article ou SKU interne.
 - prix_unitaire : le prix par unité de mesure tel qu'affiché (ex. « 1,25 $ / 100 g »).
 - confiance : « haute », « moyenne » ou « basse » selon la lisibilité.
+- categorie : une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre.
+- cle_produit : identifiant normalisé pour reconnaître le même produit d'un magasin à l'autre : marque, nom générique et format, en minuscules sans accents (ex. « lactantia beurre sale 454 g »).
 Si aucune carte de prix n'est lisible, renvoie une liste vide.`;
 
 const texte = { type: ["string", "null"] };
@@ -41,6 +43,7 @@ const OUTIL = {
             promo_quantite: { type: ["integer", "null"] },
             promo_texte: texte, date_debut: texte, date_fin: texte,
             cup: texte, code_article: texte, prix_unitaire: texte,
+            categorie: texte, cle_produit: texte,
             confiance: { type: "string", enum: ["haute", "moyenne", "basse"] },
           },
           required: ["produit", "prix_regulier", "confiance"],
@@ -59,6 +62,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: acces } = await sb.rpc("verifier_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
+    if (!acces) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
     const { image, visiteId } = await req.json().catch(() => ({}));
     if (!image || !visiteId) return json({ error: "Photo ou visite manquante." });
 
@@ -109,6 +114,7 @@ Deno.serve(async (req) => {
       promo_texte: str(c.promo_texte), date_debut: date(c.date_debut), date_fin: date(c.date_fin),
       cup: str(c.cup)?.replace(/\D/g, "") || null,
       code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire),
+      categorie: str(c.categorie), cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,
       confiance: str(c.confiance), photo_path: photoPath,
     }));
     const { data, error } = await sb.from("scans").insert(lignes).select();

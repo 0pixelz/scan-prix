@@ -7,26 +7,29 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 
 ## Fonctionnement
 
-1. **Nouvelle visite** : bannière, magasin, date.
-2. **Photographier** : le bouton ouvre directement la caméra. **Importer** permet de choisir plusieurs photos
-   déjà prises dans la photothèque. Chaque photo est traitée en
-   arrière-plan, on peut enchaîner les cartes sans attendre. Une photo peut contenir plusieurs cartes.
-3. Toucher une ligne pour **corriger** (la photo originale est affichée). Les lectures incertaines
-   portent la mention « à vérifier ».
-4. **Excel** : exporte la visite en cours ; l'onglet Visites exporte une visite précise ou toutes les visites.
-5. **Assistant** : onglet de discussion avec Claude pour résumer une visite, trouver les promos, comparer les visites ou corriger un prix. On peut aussi lui envoyer la photo d'une carte : il la lit et ajoute le prix.
+- **Code d'accès** : un code à 4 chiffres est demandé une fois par appareil. Il est vérifié par le serveur
+  (5 essais ratés bloquent l'accès 15 minutes) ; sans lui, ni les données ni Claude ne sont accessibles.
+- **Prix** : choisir ou créer une visite (bannière, magasin, date), puis **Photographier** (la caméra s'ouvre
+  directement) ou **Importer** plusieurs photos déjà prises. Chaque photo est lue en arrière-plan ; une photo
+  peut contenir plusieurs cartes. Recherche, filtres (promos, à vérifier, doublons, catégorie) et détection
+  des doublons dans la visite.
+- Toucher une ligne pour **corriger** (photo originale affichée), scanner le **code-barres** avec la caméra,
+  ou voir l'**historique** du produit.
+- **Liste** : produits à relever ; ils se cochent tout seuls quand ils sont scannés dans la visite en cours.
+- **Comparer** : le même produit côte à côte dans chaque bannière (dernier prix relevé), avec l'écart en
+  dollars et en pourcentage.
+- **Assistant** : discussion avec Claude pour résumer, comparer, corriger, gérer la liste, ou lire une photo.
+- **Excel** : trois onglets — Résumé par visite, Comparaison entre bannières, Prix (données brutes).
 
 ## Installation
 
-1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, puis déployer les fonctions Edge
-   `supabase/functions/scan` et `supabase/functions/assistant`.
+1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, définir le code d'accès (commande en
+   commentaire dans ce fichier), puis déployer les fonctions Edge de `supabase/functions/`.
 2. **Clé Claude** : ajouter le secret `ANTHROPIC_API_KEY` dans GitHub (Settings > Secrets and variables >
    Actions), puis lancer le workflow « Enregistrer la clé Claude ». La clé est gardée chiffrée dans
    Supabase Vault ; elle n'est ni dans le code ni dans Vercel.
 3. **Vercel** : importer ce repo (aucune variable à ajouter).
 4. **iPhone** : ouvrir l'URL Vercel dans Safari > Partager > « Sur l'écran d'accueil ».
-
-L'app est à usage personnel : aucun compte, quiconque connaît l'URL peut l'utiliser.
 
 ## En local
 
@@ -36,10 +39,8 @@ npm install
 npm run dev
 ```
 
-## Colonnes de l'export
+## Reconnaître un même produit
 
-Date visite, Bannière, Magasin, Produit, Marque, Format, Prix régulier, Prix promo, Qté promo,
-Prix promo unitaire (formule), Offre, Début, Fin, CUP, Code article, Prix unitaire affiché,
-Confiance, Notes, Scanné le.
-
-Pour une offre « 2 pour 5,00 $ » : Prix promo = 5,00, Qté promo = 2, Prix promo unitaire = 2,50.
+Deux relevés sont considérés comme le même produit s'ils ont le même CUP, ou la même clé normalisée
+(marque, nom et format, sans accents ni ordre des mots). Pour une offre « 2 pour 5,00 $ », le prix comparé
+est le prix à l'unité (2,50 $).
