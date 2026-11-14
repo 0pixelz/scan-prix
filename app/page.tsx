@@ -116,13 +116,9 @@ function App() {
       (async () => {
         try {
           const image = await reduire(file);
-          const res = await fetch("/api/scan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image, visiteId: v.id }),
-          });
-          const json = await res.json();
-          if (!res.ok) throw new Error(json.error || "Erreur du serveur");
+          const { data: json, error } = await sb.functions.invoke("scan", { body: { image, visiteId: v.id } });
+          if (error) throw new Error("Service de lecture indisponible. Réessaie dans un instant.");
+          if (json.error) throw new Error(json.error);
           if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
           else if (visiteRef.current?.id === v.id) setScans((s) => [...json.scans, ...s]);
         } catch (e) {
@@ -328,13 +324,11 @@ function Assistant({ visite, modifie }: { visite: Visite | null; modifie: () => 
     setTexte("");
     setAttente(true);
     try {
-      const res = await fetch("/api/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: suite, visiteId: visite?.id }),
+      const { data: json, error } = await supabaseBrowser().functions.invoke("assistant", {
+        body: { messages: suite, visiteId: visite?.id },
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Erreur du serveur");
+      if (error) throw new Error("Assistant indisponible. Réessaie dans un instant.");
+      if (json.error) throw new Error(json.error);
       setMessages([...suite, { role: "assistant", content: json.reponse }]);
       if (json.modifie) modifie();
     } catch (e) {

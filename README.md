@@ -3,7 +3,7 @@
 Web app (PWA) pour iPhone : photographier des cartes de prix en magasin, laisser Claude Vision lire
 le produit, le format, les prix, les promos, les dates et les codes, puis exporter le tout en Excel.
 
-Stack : Next.js, Supabase (base de données, photos), API Claude, Vercel.
+Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge), API Claude.
 
 ## Fonctionnement
 
@@ -17,10 +17,13 @@ Stack : Next.js, Supabase (base de données, photos), API Claude, Vercel.
 
 ## Installation
 
-1. **Supabase** : créer un projet, puis exécuter `supabase/schema.sql` dans le SQL Editor.
-2. **Vercel** : importer ce repo et ajouter les variables de `.env.example`
-   (seule `ANTHROPIC_API_KEY` est requise : les valeurs Supabase publiques sont dans `.env.production`).
-3. **iPhone** : ouvrir l'URL Vercel dans Safari > Partager > « Sur l'écran d'accueil ».
+1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, puis déployer les fonctions Edge
+   `supabase/functions/scan` et `supabase/functions/assistant`.
+2. **Clé Claude** : ajouter le secret `ANTHROPIC_API_KEY` dans GitHub (Settings > Secrets and variables >
+   Actions), puis lancer le workflow « Enregistrer la clé Claude ». La clé est gardée chiffrée dans
+   Supabase Vault ; elle n'est ni dans le code ni dans Vercel.
+3. **Vercel** : importer ce repo (aucune variable à ajouter).
+4. **iPhone** : ouvrir l'URL Vercel dans Safari > Partager > « Sur l'écran d'accueil ».
 
 L'app est à usage personnel : aucun compte, quiconque connaît l'URL peut l'utiliser.
 

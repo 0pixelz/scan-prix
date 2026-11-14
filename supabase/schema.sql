@@ -48,3 +48,33 @@ create policy "photos sans compte" on storage.objects
   for all to anon
   using (bucket_id = 'photos')
   with check (bucket_id = 'photos');
+
+-- Clé API Claude : gardée chiffrée dans Supabase Vault.
+-- definir_cle_claude : écriture seule, une seule fois (appelée par le workflow GitHub).
+create or replace function public.definir_cle_claude(cle text)
+returns text language plpgsql security definer set search_path = '' as $$
+begin
+  if cle is null or cle !~ '^sk-ant-[A-Za-z0-9_-]{20,}$' then
+    raise exception 'Cle invalide';
+  end if;
+  if exists (select 1 from vault.secrets where name = 'anthropic_api_key') then
+    raise exception 'Une cle est deja enregistree';
+  end if;
+  perform vault.create_secret(cle, 'anthropic_api_key', 'Cle API Claude pour Scan Prix');
+  return 'ok';
+end $$;
+
+-- lire_cle_claude : réservée au rôle service_role (fonctions Edge).
+create or replace function public.lire_cle_claude()
+returns text language plpgsql security definer set search_path = '' as $$
+declare r text;
+begin
+  if coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '') <> 'service_role' then
+    raise exception 'Acces refuse';
+  end if;
+  select decrypted_secret into r from vault.decrypted_secrets where name = 'anthropic_api_key' limit 1;
+  return r;
+end $$;
+
+revoke execute on function public.lire_cle_claude() from public, anon, authenticated;
+revoke execute on function public.definir_cle_claude(text) from public, authenticated;

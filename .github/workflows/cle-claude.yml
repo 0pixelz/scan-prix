@@ -1,0 +1,31 @@
+# Envoie la clé API Claude (secret GitHub) vers Supabase Vault, où les fonctions Edge la lisent.
+# La clé ne passe ni par le code ni par les journaux.
+name: Enregistrer la clé Claude
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/cle-claude.yml"]
+
+jobs:
+  cle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Envoyer la clé à Supabase
+        env:
+          CLE: ${{ secrets.ANTHROPIC_API_KEY || secrets.CLAUDE_API_KEY || secrets.ANTHROPIC_KEY || secrets.CLAUDE_KEY || secrets.API_KEY }}
+          SUPABASE_URL: https://vfikxkdadiqkducklewv.supabase.co
+          SUPABASE_KEY: sb_publishable_7ChQQ1PKLuvBgo5qcrvFhg_CKlSwK6t
+        run: |
+          if [ -z "$CLE" ]; then
+            echo "::error::Aucun secret trouvé. Ajoute ANTHROPIC_API_KEY dans Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          jq -n --arg cle "$CLE" '{cle: $cle}' > corps.json
+          code=$(curl -sS -o reponse.txt -w "%{http_code}" -X POST "$SUPABASE_URL/rest/v1/rpc/definir_cle_claude" \
+            -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" --data @corps.json)
+          rm -f corps.json
+          echo "Réponse Supabase : $code"
+          cat reponse.txt
+          [ "$code" = "200" ]
