@@ -12,7 +12,8 @@ Stack : Next.js, Supabase (base de données, photos), API Claude, Vercel.
    arrière-plan, on peut enchaîner les cartes sans attendre. Une photo peut contenir plusieurs cartes.
 3. Toucher une ligne pour **corriger** (la photo originale est affichée). Les lectures incertaines
    portent la mention « à vérifier ».
-4. **Excel** : exporte la visite en cours ; **Excel (tout)** : toutes les visites.
+4. **Excel** : exporte la visite en cours ; l'onglet Visites exporte une visite précise ou toutes les visites.
+5. **Assistant** : onglet de discussion avec Claude pour résumer une visite, trouver les promos, comparer les visites ou corriger un prix.
 
 ## Installation
 
