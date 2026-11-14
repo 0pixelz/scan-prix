@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { supabaseFromRequest } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -63,8 +63,8 @@ const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.
 const date = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
 
 export async function POST(req: Request) {
-  const ctx = await supabaseFromRequest(req);
-  if (!ctx) return NextResponse.json({ error: "Non connecté." }, { status: 401 });
+  const supabase = supabaseServer();
+  if (!supabase) return NextResponse.json({ error: "Configuration Supabase manquante." }, { status: 500 });
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: "ANTHROPIC_API_KEY manquante sur le serveur." }, { status: 500 });
   }
@@ -72,7 +72,6 @@ export async function POST(req: Request) {
   const { image, visiteId } = (await req.json().catch(() => ({}))) as { image?: string; visiteId?: string };
   if (!image || !visiteId) return NextResponse.json({ error: "Photo ou visite manquante." }, { status: 400 });
 
-  const { supabase, user } = ctx;
   const { data: visite } = await supabase.from("visites").select("id").eq("id", visiteId).maybeSingle();
   if (!visite) return NextResponse.json({ error: "Visite introuvable." }, { status: 404 });
 
@@ -110,7 +109,7 @@ export async function POST(req: Request) {
   }
 
   // Photo conservée pour pouvoir vérifier une lecture douteuse (non bloquant si l'envoi échoue).
-  let photoPath: string | null = `${user.id}/${crypto.randomUUID()}.jpg`;
+  let photoPath: string | null = `cartes/${crypto.randomUUID()}.jpg`;
   const { error: upErr } = await supabase.storage
     .from("photos")
     .upload(photoPath, Buffer.from(base64, "base64"), { contentType: "image/jpeg" });

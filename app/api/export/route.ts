@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
-import { supabaseFromRequest } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -24,11 +24,11 @@ type Ligne = {
 };
 
 export async function GET(req: Request) {
-  const ctx = await supabaseFromRequest(req);
-  if (!ctx) return NextResponse.json({ error: "Non connecté." }, { status: 401 });
+  const supabase = supabaseServer();
+  if (!supabase) return NextResponse.json({ error: "Configuration Supabase manquante." }, { status: 500 });
 
   const visiteId = new URL(req.url).searchParams.get("visite");
-  let q = ctx.supabase
+  let q = supabase
     .from("scans")
     .select("*, visites(banniere, magasin, date_visite)")
     .order("created_at", { ascending: true })

@@ -13,16 +13,8 @@ export function supabaseBrowser(): SupabaseClient {
   return browserClient;
 }
 
-/** Client serveur agissant au nom de l'utilisateur (RLS appliqué). */
-export async function supabaseFromRequest(req: Request) {
-  const auth = req.headers.get("authorization") ?? "";
-  const token = auth.replace(/^Bearer\s+/i, "");
-  if (!token || !configOk) return null;
-  const supabase = createClient(url, anon, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
-  return { supabase, user: data.user };
+/** Client serveur (app à usage personnel, sans compte). */
+export function supabaseServer(): SupabaseClient | null {
+  if (!configOk) return null;
+  return createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
 }

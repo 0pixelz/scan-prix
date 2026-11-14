@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import { useEffect, useRef, useState } from "react";
 import { configOk, supabaseBrowser } from "@/lib/supabase";
 import type { Scan, Visite } from "@/lib/types";
 
@@ -31,21 +30,6 @@ async function reduire(file: File): Promise<string> {
 }
 
 export default function Page() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [pret, setPret] = useState(false);
-
-  useEffect(() => {
-    if (!configOk) return setPret(true);
-    const sb = supabaseBrowser();
-    sb.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setPret(true);
-    });
-    const { data } = sb.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => data.subscription.unsubscribe();
-  }, []);
-
-  if (!pret) return <main><p className="muted">Chargement…</p></main>;
   if (!configOk)
     return (
       <main>
@@ -53,49 +37,10 @@ export default function Page() {
         <div className="alert">Configuration manquante : ajoute NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY (voir le README).</div>
       </main>
     );
-  return session ? <App session={session} /> : <Connexion />;
+  return <App />;
 }
 
-function Connexion() {
-  const [email, setEmail] = useState("");
-  const [mdp, setMdp] = useState("");
-  const [erreur, setErreur] = useState("");
-  const [info, setInfo] = useState("");
-  const [occupe, setOccupe] = useState(false);
-
-  async function go(creer: boolean) {
-    setErreur("");
-    setInfo("");
-    setOccupe(true);
-    const sb = supabaseBrowser();
-    const { data, error } = creer
-      ? await sb.auth.signUp({ email, password: mdp })
-      : await sb.auth.signInWithPassword({ email, password: mdp });
-    setOccupe(false);
-    if (error) setErreur(error.message);
-    else if (creer && !data.session) setInfo("Compte créé. Confirme ton courriel, puis connecte-toi.");
-  }
-
-  return (
-    <main>
-      <h1>Scan Prix</h1>
-      <form className="card" onSubmit={(e) => { e.preventDefault(); go(false); }}>
-        <label>Courriel</label>
-        <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <label>Mot de passe</label>
-        <input type="password" autoComplete="current-password" value={mdp} onChange={(e) => setMdp(e.target.value)} required minLength={6} />
-        {erreur && <div className="alert">{erreur}</div>}
-        {info && <div className="alert info">{info}</div>}
-        <p><button className="primary full" disabled={occupe}>Se connecter</button></p>
-        <button type="button" className="link" disabled={occupe || !email || mdp.length < 6} onClick={() => go(true)}>
-          Créer un compte
-        </button>
-      </form>
-    </main>
-  );
-}
-
-function App({ session }: { session: Session }) {
+function App() {
   const sb = supabaseBrowser();
   const [visites, setVisites] = useState<Visite[]>([]);
   const [visite, setVisite] = useState<Visite | null>(null);
@@ -107,11 +52,6 @@ function App({ session }: { session: Session }) {
   const [exportEnCours, setExportEnCours] = useState(false);
   const visiteRef = useRef<Visite | null>(null);
   visiteRef.current = visite;
-
-  const jeton = useCallback(async () => {
-    const { data } = await sb.auth.getSession();
-    return data.session?.access_token ?? session.access_token;
-  }, [sb, session.access_token]);
 
   // Visites : on reprend la plus récente à l'ouverture
   useEffect(() => {
@@ -144,7 +84,7 @@ function App({ session }: { session: Session }) {
           const image = await reduire(file);
           const res = await fetch("/api/scan", {
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${await jeton()}` },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ image, visiteId: v.id }),
           });
           const json = await res.json();
@@ -165,7 +105,7 @@ function App({ session }: { session: Session }) {
     setErreur("");
     try {
       const q = !toutes && visite ? `?visite=${visite.id}` : "";
-      const res = await fetch(`/api/export${q}`, { headers: { Authorization: `Bearer ${await jeton()}` } });
+      const res = await fetch(`/api/export${q}`);
       if (!res.ok) throw new Error((await res.json()).error || "Export impossible");
       const blob = await res.blob();
       const nom = !toutes && visite
@@ -191,10 +131,7 @@ function App({ session }: { session: Session }) {
 
   return (
     <main>
-      <div className="row between">
-        <h1>Scan Prix</h1>
-        <button className="link" onClick={() => sb.auth.signOut()}>Déconnexion</button>
-      </div>
+      <h1>Scan Prix</h1>
 
       <div className="card">
         <label style={{ marginTop: 0 }}>Visite en cours</label>

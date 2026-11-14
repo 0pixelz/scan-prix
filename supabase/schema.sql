@@ -3,8 +3,7 @@
 
 create table if not exists public.visites (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  banniere text not null,
+    banniere text not null,
   magasin text,
   date_visite date not null default current_date,
   created_at timestamptz not null default now()
@@ -12,8 +11,7 @@ create table if not exists public.visites (
 
 create table if not exists public.scans (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  visite_id uuid not null references public.visites (id) on delete cascade,
+    visite_id uuid not null references public.visites (id) on delete cascade,
   produit text,
   marque text,
   format text,
@@ -33,26 +31,20 @@ create table if not exists public.scans (
 );
 
 create index if not exists scans_visite_idx on public.scans (visite_id, created_at desc);
-create index if not exists visites_user_idx on public.visites (user_id, date_visite desc);
 
 alter table public.visites enable row level security;
 alter table public.scans enable row level security;
 
-drop policy if exists "visites proprietaire" on public.visites;
-create policy "visites proprietaire" on public.visites
-  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+-- App à usage personnel, sans compte : accès ouvert à la clé publique.
+create policy "visites sans compte" on public.visites for all to anon using (true) with check (true);
+create policy "scans sans compte" on public.scans for all to anon using (true) with check (true);
 
-drop policy if exists "scans proprietaire" on public.scans;
-create policy "scans proprietaire" on public.scans
-  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
-
--- Photos : bucket privé, un dossier par utilisateur (<user_id>/<fichier>.jpg)
+-- Photos : bucket privé, dossier cartes/
 insert into storage.buckets (id, name, public)
 values ('photos', 'photos', false)
 on conflict (id) do nothing;
 
-drop policy if exists "photos proprietaire" on storage.objects;
-create policy "photos proprietaire" on storage.objects
-  for all to authenticated
-  using (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text)
-  with check (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "photos sans compte" on storage.objects
+  for all to anon
+  using (bucket_id = 'photos')
+  with check (bucket_id = 'photos');
