@@ -40,6 +40,7 @@ export type Groupe = {
   marque: string | null;
   format: string | null;
   categorie: string | null;
+  icone: string | null;
   cup: string | null;
   observations: ScanAvecVisite[]; // de la plus récente à la plus ancienne
 };
@@ -76,6 +77,7 @@ export function grouper(scans: ScanAvecVisite[]): Groupe[] {
       marque: premier("marque"),
       format: premier("format"),
       categorie: premier("categorie"),
+      icone: premier("icone"),
       cup: premier("cup"),
       observations: obs,
     };

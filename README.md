@@ -9,8 +9,8 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 
 - **Code d'accès** : un code à 4 chiffres est demandé une fois par appareil. Il est vérifié par le serveur
   (5 essais ratés bloquent l'accès 15 minutes) ; sans lui, ni les données ni Claude ne sont accessibles.
-- **Prix** : choisir ou créer une visite (bannière, magasin, date), puis **Photographier** (la caméra s'ouvre
-  directement) ou **Importer** plusieurs photos déjà prises. Chaque photo est lue en arrière-plan ; une photo
+- **Prix** : choisir ou créer une visite (bannière, magasin, date), puis **Photographier** (caméra en continu :
+  un appui par carte, sans quitter la caméra) ou **Importer** plusieurs photos déjà prises. Chaque photo est lue en arrière-plan ; une photo
   peut contenir plusieurs cartes. Recherche, filtres (promos, à vérifier, doublons, catégorie) et détection
   des doublons dans la visite.
 - Toucher une ligne pour **corriger** (photo originale affichée), scanner le **code-barres** avec la caméra,

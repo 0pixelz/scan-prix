@@ -6,12 +6,14 @@ import { correspond, doublons, grouper, normaliser, promoUnitaire, type Groupe }
 import type { ProduitListe, Scan, Visite } from "@/lib/types";
 import Assistant from "./composants/Assistant";
 import Code from "./composants/Code";
+import IconeProduit from "./composants/IconeProduit";
 import Comparer from "./composants/Comparer";
 import Liste from "./composants/Liste";
+import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
   IAssistant, ICamera, IComparer, IEtiquette, IExport, IListe, IMagasin, IPhotos, IPlus, IRecherche,
-  argent, aujourdhui, chargerTout, dateLisible, reduire,
+  argent, aujourdhui, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
 type Onglet = "scan" | "liste" | "comparer" | "assistant" | "visites";
@@ -55,6 +57,7 @@ function App({ refuse }: { refuse: () => void }) {
   const [edition, setEdition] = useState<Scan | null>(null);
   const [historique, setHistorique] = useState<Groupe | null>(null);
   const [nouvelle, setNouvelle] = useState(false);
+  const [rafale, setRafale] = useState(false);
   const [exportEnCours, setExportEnCours] = useState(false);
   const [recherche, setRecherche] = useState("");
   const [filtre, setFiltre] = useState<Filtre>("tous");
@@ -102,13 +105,18 @@ function App({ refuse }: { refuse: () => void }) {
       actifs.current++;
       (async () => {
         try {
-          const image = await reduire(fichier);
+          const [image, priseLe] = await Promise.all([reduire(fichier), datePhoto(fichier)]);
           const { data: json, error } = await sb.functions.invoke("scan", { body: { image, visiteId } });
           if (error) throw new Error("Service de lecture indisponible. Réessaie dans un instant.");
           if (json.acces === false) return refuse();
           if (json.error) throw new Error(json.error);
           if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
-          else if (visiteRef.current?.id === visiteId) setScans((s) => [...json.scans, ...s]);
+          else {
+            // On note le moment où la photo a été prise (utile surtout pour les photos importées).
+            const nouveaux = (json.scans as Scan[]).map((s) => ({ ...s, photo_prise_le: priseLe }));
+            sb.from("scans").update({ photo_prise_le: priseLe }).in("id", nouveaux.map((s) => s.id)).then(() => {});
+            if (visiteRef.current?.id === visiteId) setScans((s) => [...nouveaux, ...s]);
+          }
         } catch (e) {
           setErreur(e instanceof Error ? e.message : "Erreur inconnue");
         } finally {
@@ -120,7 +128,7 @@ function App({ refuse }: { refuse: () => void }) {
     }
   }
 
-  function photographier(files: FileList | null) {
+  function photographier(files: FileList | File[] | null) {
     const v = visiteRef.current;
     if (!files?.length || !v) return;
     setErreur("");
@@ -311,10 +319,11 @@ function App({ refuse }: { refuse: () => void }) {
                   const pu = promoUnitaire(s);
                   return (
                     <div key={s.id} className="tx" role="button" onClick={() => setEdition(s)}>
-                      <div className="ic">{(s.produit || "?").trim().charAt(0).toUpperCase()}</div>
+                      <IconeProduit icone={s.icone} categorie={s.categorie} />
                       <div className="mid">
                         <div className="t">{s.produit || "Produit non lu"}</div>
                         <div className="s">{[s.marque, s.format, s.categorie].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+                        <div className="s">{[momentLisible(s.photo_prise_le ?? s.created_at), visite.banniere, visite.magasin].filter(Boolean).join(" · ")}</div>
                         {s.prix_promo !== null && (
                           <span className="pill promo">
                             {s.promo_quantite && s.promo_quantite > 1 ? `${s.promo_quantite} pour ${argent(s.prix_promo)}` : "Promo"}
@@ -372,10 +381,9 @@ function App({ refuse }: { refuse: () => void }) {
       {onglet === "scan" && visite && (
         <div className="fab">
           <div className="fabrow">
-            <label className="principal">
+            <button className="principal" onClick={() => setRafale(true)}>
               <ICamera /> Photographier
-              <input type="file" accept="image/*" capture="environment" onChange={(e) => { photographier(e.target.files); e.target.value = ""; }} />
-            </label>
+            </button>
             <label className="secondaire" aria-label="Importer des photos déjà prises">
               <IPhotos /> Importer
               <input type="file" accept="image/*" multiple onChange={(e) => { photographier(e.target.files); e.target.value = ""; }} />
@@ -408,6 +416,8 @@ function App({ refuse }: { refuse: () => void }) {
           historique={ouvrirHistorique}
         />
       )}
+
+      {rafale && <Rafale fermer={() => setRafale(false)} photo={photographier} enCours={enCours} />}
 
       {historique && <Historique groupe={historique} fermer={() => setHistorique(null)} />}
     </div>

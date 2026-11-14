@@ -125,7 +125,7 @@ export async function GET(req: Request) {
     { header: "Prix unitaire affiché", key: "prix_unitaire", width: 20 },
     { header: "Confiance", key: "confiance", width: 11 },
     { header: "Notes", key: "notes", width: 24 },
-    { header: "Scanné le", key: "created_at", width: 18 },
+    { header: "Photo prise le", key: "created_at", width: 18 },
   ];
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   lignes.forEach((l, i) => {
@@ -152,7 +152,7 @@ export async function GET(req: Request) {
       prix_unitaire: l.prix_unitaire,
       confiance: l.confiance,
       notes: l.notes,
-      created_at: new Date(l.created_at).toLocaleString("fr-CA", { timeZone: "America/Toronto" }),
+      created_at: new Date(l.photo_prise_le ?? l.created_at).toLocaleString("fr-CA", { timeZone: "America/Toronto" }),
     });
   });
   entete(ws);

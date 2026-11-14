@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { comparer, grouper, normaliser, type Groupe } from "@/lib/comparaison";
 import type { ScanAvecVisite } from "@/lib/types";
+import IconeProduit from "./IconeProduit";
 import { IComparer, IRecherche, argent, chargerTout, dateLisible } from "./ui";
 
 /** Même produit, côte à côte dans chaque bannière visitée (dernier prix relevé). */
@@ -50,7 +51,8 @@ export default function Comparer({ historique }: { historique: (g: Groupe) => vo
 
       {visibles.map((l) => (
         <div key={l.groupe.id} className="card cmp" role="button" onClick={() => historique(l.groupe)}>
-          <div className="row between">
+          <div className="row between" style={{ gap: 12 }}>
+            <IconeProduit icone={l.groupe.icone} categorie={l.groupe.categorie} />
             <div className="grow">
               <div className="t">{l.groupe.nom}</div>
               <div className="s">{[l.groupe.marque, l.groupe.format, l.groupe.categorie].filter(Boolean).join(" · ") || "Aucun détail"}</div>

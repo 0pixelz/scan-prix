@@ -22,6 +22,7 @@ Règles :
 - prix_unitaire : le prix par unité de mesure tel qu'affiché (ex. « 1,25 $ / 100 g »).
 - confiance : « haute », « moyenne » ou « basse » selon la lisibilité.
 - categorie : une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre.
+- icone : le type de produit, une seule valeur parmi : pain, viennoiserie, craquelin, biscuit, cereales, pates_riz, farine_sucre, lait, yogourt, fromage, beurre, oeufs, viande, volaille, charcuterie, poisson, fruits_de_mer, fruits, legumes, salade, conserve, soupe, sauce_condiment, huile, epices, tartinade, cafe, the, jus, boisson_gazeuse, eau, biere, vin, croustilles, noix, bonbon, chocolat, dessert, creme_glacee, surgele, pizza, repas_prepare, bebe, animaux, nettoyage, lessive, papier, hygiene, sante, autre.
 - cle_produit : identifiant normalisé pour reconnaître le même produit d'un magasin à l'autre : marque, nom générique et format, en minuscules sans accents (ex. « lactantia beurre sale 454 g »).
 Réponds toujours en appelant l'outil enregistrer_cartes, une seule fois, avec toutes les cartes lues.
 Si aucune carte de prix n'est lisible, appelle-le avec une liste vide.`;
@@ -44,7 +45,7 @@ const OUTIL = {
             promo_quantite: { type: ["integer", "null"] },
             promo_texte: texte, date_debut: texte, date_fin: texte,
             cup: texte, code_article: texte, prix_unitaire: texte,
-            categorie: texte, cle_produit: texte,
+            categorie: texte, icone: texte, cle_produit: texte,
             confiance: { type: "string", enum: ["haute", "moyenne", "basse"] },
           },
           required: ["produit", "prix_regulier", "confiance"],
@@ -114,7 +115,7 @@ Deno.serve(async (req) => {
       promo_texte: str(c.promo_texte), date_debut: date(c.date_debut), date_fin: date(c.date_fin),
       cup: str(c.cup)?.replace(/\D/g, "") || null,
       code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire),
-      categorie: str(c.categorie), cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,
+      categorie: str(c.categorie), icone: str(c.icone)?.toLowerCase() ?? null, cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,
       confiance: str(c.confiance), photo_path: photoPath,
     }));
     const { data, error } = await sb.from("scans").insert(lignes).select();

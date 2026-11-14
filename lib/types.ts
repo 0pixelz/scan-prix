@@ -23,9 +23,11 @@ export type Scan = {
   prix_unitaire: string | null;
   categorie: string | null;
   cle_produit: string | null;
+  icone: string | null;
   confiance: string | null;
   notes: string | null;
   photo_path: string | null;
+  photo_prise_le: string | null;
   created_at: string;
 };
 

@@ -15,6 +15,29 @@ export const dateLisible = (d: string) =>
     ...(d.slice(0, 4) === String(new Date().getFullYear()) ? {} : { year: "numeric" }), // année seulement si ce n'est pas l'année en cours
   });
 
+/** Date et heure courtes : « 14 nov., 18 h 01 ». */
+export const momentLisible = (iso: string) =>
+  new Date(iso).toLocaleString("fr-CA", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    ...(iso.slice(0, 4) === String(new Date().getFullYear()) ? {} : { year: "numeric" }),
+  });
+
+/** Moment où la photo a été prise : la date inscrite dans la photo (photos importées), sinon celle du fichier. */
+export async function datePhoto(file: File): Promise<string> {
+  try {
+    const exifr = (await import("exifr")).default;
+    const exif = await exifr.parse(file, ["DateTimeOriginal", "CreateDate"]);
+    const d: unknown = exif?.DateTimeOriginal ?? exif?.CreateDate;
+    if (d instanceof Date && !Number.isNaN(d.getTime())) return d.toISOString();
+  } catch {
+    /* pas de données dans la photo */
+  }
+  return new Date(file.lastModified || Date.now()).toISOString();
+}
+
 /** Réduit la photo (max 1568 px) pour un envoi rapide sur réseau cellulaire. */
 export async function reduire(file: File): Promise<string> {
   const url = URL.createObjectURL(file);

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { prixEffectif, type Groupe } from "@/lib/comparaison";
+import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Scan, type Visite } from "@/lib/types";
 import { BANNIERES, ICodeBarres, argent, aujourdhui, dateLisible } from "./ui";
 
@@ -98,7 +99,7 @@ export function ScannerCode({ fermer, lu }: { fermer: () => void; lu: (code: str
   );
 }
 
-const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
+const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
 
 export function Edition({ scan, fermer, enregistre, supprime, historique }: {
   scan: Scan;
@@ -137,7 +138,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
     };
     const qte = n("promo_quantite");
     const maj = {
-      produit: t("produit"), marque: t("marque"), format: t("format"), categorie: t("categorie"),
+      produit: t("produit"), marque: t("marque"), format: t("format"), categorie: t("categorie"), icone: t("icone"),
       prix_regulier: n("prix_regulier"), prix_promo: n("prix_promo"),
       promo_quantite: qte === null ? null : Math.trunc(qte),
       promo_texte: t("promo_texte"), date_debut: t("date_debut"), date_fin: t("date_fin"),
@@ -175,6 +176,11 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
           <option value="">Aucune</option>
           {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
           {f.categorie && !CATEGORIES.includes(f.categorie) && <option>{f.categorie}</option>}
+        </select>
+        <label>Type de produit (icône)</label>
+        <select value={f.icone} onChange={(e) => setF({ ...f, icone: e.target.value })}>
+          <option value="">Selon la catégorie</option>
+          {Object.entries(TYPES_PRODUIT).map(([cle, nom]) => <option key={cle} value={cle}>{nom}</option>)}
         </select>
         <div className="grid2">
           {champ("prix_regulier", "Prix régulier ($)", { inputMode: "decimal" })}
