@@ -8,7 +8,8 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 ## Fonctionnement
 
 1. **Nouvelle visite** : bannière, magasin, date.
-2. **Photographier** : le bouton ouvre directement la caméra. Chaque photo est traitée en
+2. **Photographier** : le bouton ouvre directement la caméra. **Importer** permet de choisir plusieurs photos
+   déjà prises dans la photothèque. Chaque photo est traitée en
    arrière-plan, on peut enchaîner les cartes sans attendre. Une photo peut contenir plusieurs cartes.
 3. Toucher une ligne pour **corriger** (la photo originale est affichée). Les lectures incertaines
    portent la mention « à vérifier ».

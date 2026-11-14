@@ -22,7 +22,11 @@ const argent = (v: number | null) =>
 const aujourdhui = () => new Date().toLocaleDateString("en-CA"); // AAAA-MM-JJ, heure locale
 
 const dateLisible = (d: string) =>
-  new Date(`${d}T12:00:00`).toLocaleDateString("fr-CA", { day: "numeric", month: "short", year: "numeric" });
+  new Date(`${d}T12:00:00`).toLocaleDateString("fr-CA", {
+    day: "numeric",
+    month: "short",
+    ...(d.slice(0, 4) === String(new Date().getFullYear()) ? {} : { year: "numeric" }), // année affichée seulement si ce n'est pas l'année en cours
+  });
 
 /** Prix promo ramené à l'unité (2 pour 5 $ -> 2,50 $). */
 const promoUnitaire = (s: Scan) =>
@@ -58,6 +62,7 @@ const IAssistant = () => <Icone d={["M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-
 const IMagasin = () => <Icone d={["M4 9l1.2-5h13.6L20 9", "M4 9v11h16V9", "M4 9a2.7 2.7 0 0 0 5.33 0 2.7 2.7 0 0 0 5.34 0A2.7 2.7 0 0 0 20 9", "M9.5 20v-5h5v5"]} />;
 const IEnvoyer = () => <Icone d={["M12 19V5", "M6 11l6-6 6 6"]} />;
 const IPlus = () => <Icone d={["M12 5v14", "M5 12h14"]} />;
+const IPhotos = () => <Icone d={["M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z", "M3 16l5-5 4 4 3-3 6 6", "M15.5 9.5h.01"]} />;
 const IFermer = () => <Icone d={["M6 6l12 12", "M18 6L6 18"]} />;
 const IExport = () => <Icone d={["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M5 20h14"]} />;
 
@@ -108,27 +113,42 @@ function App() {
   useEffect(() => { chargerScans(); }, [chargerScans, visite]);
 
   // Chaque photo part en arrière-plan : on peut enchaîner les cartes sans attendre.
+  // File d'attente : chaque photo est lue en arrière-plan, trois à la fois au maximum
+  // (on peut enchaîner les cartes, ou importer d'un coup plusieurs photos déjà prises).
+  const file = useRef<{ fichier: File; visiteId: string }[]>([]);
+  const actifs = useRef(0);
+
+  function avancer() {
+    while (actifs.current < 3 && file.current.length) {
+      const { fichier, visiteId } = file.current.shift()!;
+      actifs.current++;
+      (async () => {
+        try {
+          const image = await reduire(fichier);
+          const { data: json, error } = await sb.functions.invoke("scan", { body: { image, visiteId } });
+          if (error) throw new Error("Service de lecture indisponible. Réessaie dans un instant.");
+          if (json.error) throw new Error(json.error);
+          if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
+          else if (visiteRef.current?.id === visiteId) setScans((s) => [...json.scans, ...s]);
+        } catch (e) {
+          setErreur(e instanceof Error ? e.message : "Erreur inconnue");
+        } finally {
+          actifs.current--;
+          setEnCours((n) => n - 1);
+          avancer();
+        }
+      })();
+    }
+  }
+
   function photographier(files: FileList | null) {
     const v = visiteRef.current;
     if (!files?.length || !v) return;
     setErreur("");
-    for (const file of Array.from(files)) {
-      setEnCours((n) => n + 1);
-      (async () => {
-        try {
-          const image = await reduire(file);
-          const { data: json, error } = await sb.functions.invoke("scan", { body: { image, visiteId: v.id } });
-          if (error) throw new Error("Service de lecture indisponible. Réessaie dans un instant.");
-          if (json.error) throw new Error(json.error);
-          if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
-          else if (visiteRef.current?.id === v.id) setScans((s) => [...json.scans, ...s]);
-        } catch (e) {
-          setErreur(e instanceof Error ? e.message : "Erreur inconnue");
-        } finally {
-          setEnCours((n) => n - 1);
-        }
-      })();
-    }
+    const ajouts = Array.from(files).map((fichier) => ({ fichier, visiteId: v.id }));
+    file.current.push(...ajouts);
+    setEnCours((n) => n + ajouts.length);
+    avancer();
   }
 
   async function exporter(v: Visite | null) {
@@ -216,7 +236,7 @@ function App() {
                   <div className="empty">
                     <IEtiquette />
                     <div>Aucun prix pour l'instant.</div>
-                    <div className="muted">Photographie une carte de prix pour commencer.</div>
+                    <div className="muted">Photographie une carte de prix, ou importe des photos déjà prises.</div>
                   </div>
                 )}
                 {scans.map((s) => {
@@ -277,10 +297,16 @@ function App() {
 
       {onglet === "scan" && visite && (
         <div className="fab">
-          <label>
-            <ICamera /> Photographier
-            <input type="file" accept="image/*" capture="environment" onChange={(e) => { photographier(e.target.files); e.target.value = ""; }} />
-          </label>
+          <div className="fabrow">
+            <label className="principal">
+              <ICamera /> Photographier
+              <input type="file" accept="image/*" capture="environment" onChange={(e) => { photographier(e.target.files); e.target.value = ""; }} />
+            </label>
+            <label className="secondaire" aria-label="Importer des photos déjà prises">
+              <IPhotos /> Importer
+              <input type="file" accept="image/*" multiple onChange={(e) => { photographier(e.target.files); e.target.value = ""; }} />
+            </label>
+          </div>
         </div>
       )}
 
