@@ -9,6 +9,7 @@ import { BANNIERES, ICodeBarres, argent, aujourdhui, dateLisible } from "./ui";
 
 export function NouvelleVisite({ fermer, creee }: { fermer?: () => void; creee: (v: Visite) => void }) {
   const [banniere, setBanniere] = useState("");
+  const [autre, setAutre] = useState(false);
   const [magasin, setMagasin] = useState("");
   const [date, setDate] = useState(aujourdhui());
   const [erreur, setErreur] = useState("");
@@ -30,15 +31,26 @@ export function NouvelleVisite({ fermer, creee }: { fermer?: () => void; creee: 
         <div className="grip" />
         <h3>Nouvelle visite</h3>
         <label>Bannière</label>
-        <input list="bannieres" value={banniere} onChange={(e) => setBanniere(e.target.value)} required placeholder="Ex. IGA" />
-        <datalist id="bannieres">{BANNIERES.map((b) => <option key={b} value={b} />)}</datalist>
+        <div className="tuiles">
+          {BANNIERES.map((b, i) => (
+            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { setAutre(false); setBanniere(b); }}>
+              <span style={{ "--h": (i * 47 + 172) % 360 } as React.CSSProperties}>{b.charAt(0)}</span>
+              {b}
+            </button>
+          ))}
+          <button type="button" className={autre ? "on" : ""} aria-pressed={autre} onClick={() => { setAutre(true); setBanniere(""); }}>
+            <span style={{ "--h": 215 } as React.CSSProperties}>+</span>
+            Autre
+          </button>
+        </div>
+        {autre && <input style={{ marginTop: 10 }} value={banniere} onChange={(e) => setBanniere(e.target.value)} placeholder="Nom de la bannière" autoFocus />}
         <label>Magasin (ville, succursale)</label>
         <input value={magasin} onChange={(e) => setMagasin(e.target.value)} placeholder="Ex. Mirabel" />
         <label>Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
         <div className="actions">
-          <button className="primary full">Commencer</button>
+          <button className="primary full" disabled={!banniere.trim()}>Commencer</button>
           {fermer && <button type="button" className="full" onClick={fermer}>Annuler</button>}
         </div>
       </form>
@@ -99,7 +111,7 @@ export function ScannerCode({ fermer, lu }: { fermer: () => void; lu: (code: str
   );
 }
 
-const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
+const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "points", "points_details", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
 
 export function Edition({ scan, fermer, enregistre, supprime, historique }: {
   scan: Scan;
@@ -112,6 +124,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
   const [f, setF] = useState<Record<string, string>>(() =>
     Object.fromEntries(CHAMPS_EDITION.map((k) => [k, (scan as Record<string, unknown>)[k]?.toString() ?? ""])),
   );
+  const [membre, setMembre] = useState(Boolean(scan.prix_membre));
   const [photo, setPhoto] = useState<string | null>(null);
   const [erreur, setErreur] = useState("");
   const [confirmer, setConfirmer] = useState(false);
@@ -137,11 +150,13 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
       return Number.isFinite(v) ? v : null;
     };
     const qte = n("promo_quantite");
+    const pts = n("points");
     const maj = {
       produit: t("produit"), marque: t("marque"), format: t("format"), categorie: t("categorie"), icone: t("icone"),
       prix_regulier: n("prix_regulier"), prix_promo: n("prix_promo"),
       promo_quantite: qte === null ? null : Math.trunc(qte),
       promo_texte: t("promo_texte"), date_debut: t("date_debut"), date_fin: t("date_fin"),
+      prix_membre: membre, points: pts === null ? null : Math.trunc(pts), points_details: t("points_details"),
       cup: t("cup")?.replace(/\D/g, "") || null, code_article: t("code_article"), prix_unitaire: t("prix_unitaire"), notes: t("notes"),
       confiance: "haute", // vérifié à la main
     };
@@ -189,6 +204,14 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
           {champ("promo_quantite", "Quantité promo", { inputMode: "numeric" })}
         </div>
         {champ("promo_texte", "Offre")}
+        <label className="case">
+          <input type="checkbox" checked={membre} onChange={(e) => setMembre(e.target.checked)} />
+          Prix réservé aux membres
+        </label>
+        <div className="grid2">
+          {champ("points", "Points de fidélité", { inputMode: "numeric" })}
+          {champ("points_details", "Programme, condition")}
+        </div>
         <div className="grid2">
           {champ("date_debut", "Début", { type: "date" })}
           {champ("date_fin", "Fin", { type: "date" })}

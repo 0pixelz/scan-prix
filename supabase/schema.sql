@@ -39,6 +39,9 @@ alter table public.scans enable row level security;
 alter table public.scans add column if not exists categorie text;
 alter table public.scans add column if not exists cle_produit text;
 alter table public.scans add column if not exists photo_prise_le timestamptz; -- moment où la photo a été prise
+alter table public.scans add column if not exists prix_membre boolean; -- prix réservé aux membres
+alter table public.scans add column if not exists points integer;      -- points de fidélité offerts
+alter table public.scans add column if not exists points_details text; -- programme et condition
 alter table public.scans add column if not exists icone text; -- type de produit (icône), choisi par Claude
 
 -- Liste des produits à relever

@@ -16,6 +16,9 @@ export type Scan = {
   prix_promo: number | null;
   promo_quantite: number | null;
   promo_texte: string | null;
+  prix_membre: boolean | null;
+  points: number | null;
+  points_details: string | null;
   date_debut: string | null;
   date_fin: string | null;
   cup: string | null;

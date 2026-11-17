@@ -19,6 +19,8 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 - **Comparer** : le même produit côte à côte dans chaque bannière (dernier prix relevé), avec l'écart en
   dollars et en pourcentage.
 - **Assistant** : discussion avec Claude pour résumer, comparer, corriger, gérer la liste, ou lire une photo.
+- **Prix membre et points** : Claude repère les prix réservés aux membres et les offres de points de fidélité ;
+  ils sont affichés sur chaque prix et dans l'Excel.
 - **Excel** : trois onglets — Résumé par visite, Comparaison entre bannières, Prix (données brutes).
 
 ## Installation

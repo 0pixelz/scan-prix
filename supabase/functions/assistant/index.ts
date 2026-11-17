@@ -18,6 +18,9 @@ const CHAMPS = {
   prix_promo: { type: "number", description: "Prix total de l'offre (5.00 pour « 2 pour 5 $ »)" },
   promo_quantite: { type: "integer", description: "Quantité de l'offre (2 pour « 2 pour 5 $ »)" },
   promo_texte: { type: "string" },
+  prix_membre: { type: "boolean", description: "Vrai si le prix en rabais est réservé aux membres d'un programme ou d'une carte" },
+  points: { type: "integer", description: "Points de fidélité offerts à l'achat" },
+  points_details: { type: "string", description: "Programme et condition des points, tels qu'écrits" },
   date_debut: { type: "string", description: "AAAA-MM-JJ" },
   date_fin: { type: "string", description: "AAAA-MM-JJ" },
   cup: { type: "string" },
@@ -119,6 +122,7 @@ Quand une photo est jointe :
 - Lis chaque carte de prix visible. Sauf demande contraire, ajoute chacune à la visite en cours avec ajouter_prix, puis résume ce qui a été ajouté (produit, format, prix, promo).
 - N'invente rien : un champ illisible ou absent est omis. Indique confiance « moyenne » ou « basse » si la lecture est incertaine, et dis-le dans ta réponse.
 - prix_regulier : prix courant à l'unité. Offre « 2 pour 5,00 $ » : prix_promo = 5.00 et promo_quantite = 2. Promo simple : promo_quantite = 1.
+- prix_membre = true si le prix en rabais est réservé aux membres (« Prix membre », carte du magasin). points et points_details : points de fidélité offerts, avec le programme et la condition.
 - Dates AAAA-MM-JJ (année du jour si elle n'est pas imprimée). cup : chiffres du code-barres seulement. prix_unitaire : tel qu'affiché (« 1,25 $ / 100 g »).
 - Si aucune carte n'est lisible, dis-le et n'ajoute rien.`;
 
@@ -148,7 +152,7 @@ Quand une photo est jointe :
         case "chercher_prix": {
           let q = sb
             .from("scans")
-            .select("id, produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, cup, code_article, prix_unitaire, categorie, confiance, notes, visites!inner(id, banniere, magasin, date_visite)")
+            .select("id, produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, prix_membre, points, points_details, date_debut, date_fin, cup, code_article, prix_unitaire, categorie, confiance, notes, visites!inner(id, banniere, magasin, date_visite)")
             .order("created_at", { ascending: false })
             .limit(Math.min(Number(a.limite) || 100, 300));
           if (typeof a.visite_id === "string") q = q.eq("visite_id", a.visite_id);

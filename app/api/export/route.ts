@@ -41,6 +41,8 @@ export async function GET(req: Request) {
     { header: "Promos", key: "promos", width: 9 },
     { header: "% en promo", key: "pctPromo", width: 12, style: { numFmt: "0 %" } },
     { header: "Rabais moyen", key: "rabais", width: 14, style: { numFmt: "0.0 %" } },
+    { header: "Prix membres", key: "membres", width: 13 },
+    { header: "Offres de points", key: "points", width: 15 },
     { header: "À vérifier", key: "verif", width: 11 },
   ];
   const parVisite = new Map<string, ScanAvecVisite[]>();
@@ -64,6 +66,8 @@ export async function GET(req: Request) {
         promos: promos.length,
         pctPromo: v.length ? promos.length / v.length : null,
         rabais: rabais.length ? rabais.reduce((a, b) => a + b, 0) / rabais.length : null,
+        membres: v.filter((s) => s.prix_membre).length,
+        points: v.filter((s) => s.points).length,
         verif: v.filter((s) => s.confiance && s.confiance !== "haute").length,
       });
     });
@@ -118,6 +122,9 @@ export async function GET(req: Request) {
     { header: "Prix promo unitaire", key: "promo_unitaire", width: 18, style: { numFmt: DOLLARS } },
     { header: "Prix payé", key: "prix_paye", width: 11, style: { numFmt: DOLLARS } },
     { header: "Offre", key: "promo_texte", width: 24 },
+    { header: "Prix membre", key: "prix_membre", width: 12 },
+    { header: "Points", key: "points", width: 9 },
+    { header: "Détail des points", key: "points_details", width: 28 },
     { header: "Début", key: "date_debut", width: 12 },
     { header: "Fin", key: "date_fin", width: 12 },
     { header: "CUP", key: "cup", width: 16 },
@@ -145,6 +152,9 @@ export async function GET(req: Request) {
       promo_unitaire: { formula: `IF(I${r}="","",I${r}/IF(OR(J${r}="",J${r}=0),1,J${r}))`, result: promoUnitaire(l) ?? "" },
       prix_paye: { formula: `IF(K${r}="",H${r},K${r})`, result: prixEffectif(l) ?? "" },
       promo_texte: l.promo_texte,
+      prix_membre: l.prix_membre ? "Oui" : null,
+      points: l.points,
+      points_details: l.points_details,
       date_debut: l.date_debut,
       date_fin: l.date_fin,
       cup: l.cup, // texte : garde les zéros de tête

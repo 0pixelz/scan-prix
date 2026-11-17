@@ -330,6 +330,8 @@ function App({ refuse }: { refuse: () => void }) {
                             {s.date_fin ? ` · jusqu'au ${dateLisible(s.date_fin)}` : ""}
                           </span>
                         )}{" "}
+                        {s.prix_membre && <span className="pill membre">Prix membre</span>}{" "}
+                        {s.points ? <span className="pill pts">{s.points.toLocaleString("fr-CA")} points</span> : null}{" "}
                         {s.confiance && s.confiance !== "haute" && <span className="pill verif">À vérifier</span>}{" "}
                         {enDouble.has(s.id) && <span className="pill verif">Doublon</span>}
                       </div>

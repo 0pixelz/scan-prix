@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ScanAvecVisite } from "@/lib/types";
 
-export const BANNIERES = ["Metro", "Super C", "IGA", "Maxi", "Provigo", "Walmart", "Costco", "Adonis", "Marché Richelieu", "Tigre Géant", "Pharmaprix", "Jean Coutu"];
+export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C"];
 
 export const argent = (v: number | null) =>
   v === null ? "—" : Number(v).toLocaleString("fr-CA", { style: "currency", currency: "CAD" });

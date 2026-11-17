@@ -17,6 +17,9 @@ Règles :
 - Offre multiple « 2 pour 5,00 $ » ou « 2/5 $ » : prix_promo = 5.00 (total de l'offre) et promo_quantite = 2.
 - Prix promo simple : prix_promo = le prix en rabais, promo_quantite = 1.
 - promo_texte : le libellé de l'offre tel qu'écrit (ex. « Économisez 1,00 $ », « Prix membre »).
+- prix_membre : true si le prix en rabais (ou le prix affiché) est réservé aux membres d'un programme ou d'une carte (« Prix membre », « Membres Moi », « Scène+ », « PC Optimum », carte du magasin), sinon false.
+- points : nombre de points de fidélité offerts à l'achat (« 500 points » -> 500), sinon null.
+- points_details : le programme et la condition tels qu'écrits (ex. « 1 000 points Moi à l'achat de 2 »), sinon null.
 - Dates au format AAAA-MM-JJ. Si l'année n'est pas imprimée, utilise celle de la date du jour fournie.
 - cup : uniquement les chiffres du code-barres (CUP/UPC). code_article : numéro d'article ou SKU interne.
 - prix_unitaire : le prix par unité de mesure tel qu'affiché (ex. « 1,25 $ / 100 g »).
@@ -44,6 +47,7 @@ const OUTIL = {
             prix_regulier: nombre, prix_promo: nombre,
             promo_quantite: { type: ["integer", "null"] },
             promo_texte: texte, date_debut: texte, date_fin: texte,
+            prix_membre: { type: ["boolean", "null"] }, points: { type: ["integer", "null"] }, points_details: texte,
             cup: texte, code_article: texte, prix_unitaire: texte,
             categorie: texte, icone: texte, cle_produit: texte,
             confiance: { type: "string", enum: ["haute", "moyenne", "basse"] },
@@ -113,6 +117,7 @@ Deno.serve(async (req) => {
       prix_regulier: num(c.prix_regulier), prix_promo: num(c.prix_promo),
       promo_quantite: typeof c.promo_quantite === "number" ? Math.trunc(c.promo_quantite) : null,
       promo_texte: str(c.promo_texte), date_debut: date(c.date_debut), date_fin: date(c.date_fin),
+      prix_membre: c.prix_membre === true, points: typeof c.points === "number" ? Math.trunc(c.points) : null, points_details: str(c.points_details),
       cup: str(c.cup)?.replace(/\D/g, "") || null,
       code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire),
       categorie: str(c.categorie), icone: str(c.icone)?.toLowerCase() ?? null, cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,

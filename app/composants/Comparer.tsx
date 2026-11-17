@@ -69,7 +69,7 @@ export default function Comparer({ historique }: { historique: (g: Groupe) => vo
               <div key={b.banniere} className={i === 0 && l.parBanniere.length > 1 ? "moins" : ""}>
                 <span>{b.banniere}</span>
                 <b>{argent(b.prix)}</b>
-                <small>{b.obs.prix_promo !== null ? "Promo · " : ""}{b.obs.visites ? dateLisible(b.obs.visites.date_visite) : ""}</small>
+                <small>{b.obs.prix_membre ? "Membre · " : b.obs.prix_promo !== null ? "Promo · " : ""}{b.obs.visites ? dateLisible(b.obs.visites.date_visite) : ""}</small>
               </div>
             ))}
           </div>
