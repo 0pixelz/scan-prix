@@ -25,7 +25,7 @@ export default function Assistant({ visite, modifie, refuse }: { visite: Visite 
 
   async function joindre(files: FileList | null) {
     if (!files?.length) return;
-    try { setPhoto(await reduire(files[0])); } catch { /* photo illisible : on ignore */ }
+    try { setPhoto((await reduire(files[0])).image); } catch { /* photo illisible : on ignore */ }
   }
 
   async function envoyer(contenu: string) {

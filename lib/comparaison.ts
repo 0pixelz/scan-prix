@@ -136,3 +136,92 @@ export function correspond(item: { nom: string; cup: string | null }, s: Scan): 
   const texte = normaliser([s.produit, s.marque, s.format, s.cle_produit].filter(Boolean).join(" "));
   return mots.every((m) => texte.includes(m));
 }
+
+/** CUP réduit à ses chiffres, sans zéros de tête : même valeur quelle que soit la façon de l'écrire. */
+export const cupNormalise = (cup: string | null | undefined) => (cup ?? "").replace(/\D/g, "").replace(/^0+/, "");
+
+export type Variation = {
+  groupe: Groupe;
+  banniere: string;
+  avant: ScanAvecVisite;
+  apres: ScanAvecVisite;
+  delta: number;
+  pct: number;
+};
+
+/** Changements de prix : pour chaque produit et chaque bannière, le dernier relevé comparé au relevé de la visite précédente. */
+export function variations(groupes: Groupe[]): Variation[] {
+  const liste: Variation[] = [];
+  for (const groupe of groupes) {
+    const parBanniere = new Map<string, ScanAvecVisite[]>();
+    for (const o of groupe.observations) {
+      const b = o.visites?.banniere?.trim();
+      if (!b || prixEffectif(o) === null) continue;
+      const cle = normaliser(b);
+      if (!parBanniere.has(cle)) parBanniere.set(cle, []);
+      parBanniere.get(cle)!.push(o); // déjà triées, de la plus récente à la plus ancienne
+    }
+    for (const obs of parBanniere.values()) {
+      const apres = obs[0];
+      const avant = obs.find((o) => o.visite_id !== apres.visite_id);
+      if (!avant) continue;
+      const delta = prixEffectif(apres)! - prixEffectif(avant)!;
+      if (Math.abs(delta) < 0.005) continue;
+      liste.push({ groupe, banniere: apres.visites!.banniere, avant, apres, delta, pct: (delta / prixEffectif(avant)!) * 100 });
+    }
+  }
+  return liste.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+}
+
+export type IndiceBanniere = { banniere: string; indice: number; produits: number };
+
+/**
+ * Indice de prix par bannière sur les produits communs (relevés dans au moins deux bannières) :
+ * 100 = la moyenne des bannières ; en dessous de 100 = moins cher que la moyenne.
+ */
+export function indices(lignes: LigneComparaison[]): IndiceBanniere[] {
+  const cumul = new Map<string, { banniere: string; somme: number; n: number }>();
+  for (const l of lignes) {
+    if (l.parBanniere.length < 2) continue;
+    const moyenne = l.parBanniere.reduce((s, b) => s + b.prix, 0) / l.parBanniere.length;
+    if (moyenne <= 0) continue;
+    for (const b of l.parBanniere) {
+      const cle = normaliser(b.banniere);
+      const c = cumul.get(cle) ?? { banniere: b.banniere, somme: 0, n: 0 };
+      c.somme += b.prix / moyenne;
+      c.n++;
+      cumul.set(cle, c);
+    }
+  }
+  return [...cumul.values()]
+    .map((c) => ({ banniere: c.banniere, indice: (c.somme / c.n) * 100, produits: c.n }))
+    .sort((a, b) => a.indice - b.indice);
+}
+
+export type StatBanniere = { banniere: string; prix: number; promos: number; membres: number; visites: number };
+
+/** Nombre de prix, de promos et de visites par bannière. */
+export function statsBannieres(scans: ScanAvecVisite[]): StatBanniere[] {
+  const cumul = new Map<string, StatBanniere & { ids: Set<string> }>();
+  for (const s of scans) {
+    const b = s.visites?.banniere?.trim();
+    if (!b) continue;
+    const cle = normaliser(b);
+    const c = cumul.get(cle) ?? { banniere: b, prix: 0, promos: 0, membres: 0, visites: 0, ids: new Set<string>() };
+    c.prix++;
+    if (s.prix_promo !== null) c.promos++;
+    if (s.prix_membre) c.membres++;
+    c.ids.add(s.visite_id);
+    cumul.set(cle, c);
+  }
+  return [...cumul.values()].map(({ ids, ...c }) => ({ ...c, visites: ids.size })).sort((a, b) => b.prix - a.prix);
+}
+
+/** Distance en mètres entre deux positions GPS. */
+export function distanceMetres(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
+  const rad = Math.PI / 180;
+  const dLat = (b.latitude - a.latitude) * rad;
+  const dLon = (b.longitude - a.longitude) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * rad) * Math.cos(b.latitude * rad) * Math.sin(dLon / 2) ** 2;
+  return 6371000 * 2 * Math.asin(Math.sqrt(h));
+}

@@ -8,9 +8,16 @@ const cors = {
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5";
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 
-const CONSIGNES = `Tu lis des photos de cartes de prix (étiquettes de tablette) prises en magasin au Québec.
-Pour CHAQUE carte de prix lisible sur la photo, extrais les champs demandés.
-Règles :
+const INTRO_CARTE = `Tu lis des photos de cartes de prix (étiquettes de tablette) prises en magasin au Québec.
+Pour CHAQUE carte de prix lisible sur la photo, extrais les champs demandés.`;
+
+// Page de circulaire : chaque offre de la page est traitée comme une carte de prix.
+const INTRO_CIRCULAIRE = `Tu lis la photo ou la capture d'une page de circulaire d'épicerie au Québec.
+Pour CHAQUE offre lisible sur la page (un produit avec son prix), extrais les champs demandés, comme si c'était une carte de prix.
+Le prix annoncé dans la circulaire est le prix en rabais (prix_promo) ; prix_regulier est le prix courant seulement s'il est imprimé, sinon null.
+Les dates de validité de la circulaire, si elles sont visibles, s'appliquent à toutes les offres de la page.`;
+
+const REGLES = `Règles :
 - N'invente rien. Un champ illisible ou absent = null.
 - Les prix sont des nombres en dollars (3,99 $ -> 3.99 ; 99¢ -> 0.99).
 - prix_regulier : prix courant à l'unité. S'il n'y a qu'un seul prix et aucune mention de rabais, c'est le prix régulier.
@@ -28,7 +35,7 @@ Règles :
 - icone : le type de produit, une seule valeur parmi : pain, viennoiserie, craquelin, biscuit, cereales, pates_riz, farine_sucre, lait, yogourt, fromage, beurre, oeufs, viande, volaille, charcuterie, poisson, fruits_de_mer, fruits, legumes, salade, conserve, soupe, sauce_condiment, huile, epices, tartinade, cafe, the, jus, boisson_gazeuse, eau, biere, vin, croustilles, noix, bonbon, chocolat, dessert, creme_glacee, surgele, pizza, repas_prepare, bebe, animaux, nettoyage, lessive, papier, hygiene, sante, autre.
 - cle_produit : identifiant normalisé pour reconnaître le même produit d'un magasin à l'autre : marque, nom générique et format, en minuscules sans accents (ex. « lactantia beurre sale 454 g »).
 Réponds toujours en appelant l'outil enregistrer_cartes, une seule fois, avec toutes les cartes lues.
-Si aucune carte de prix n'est lisible, appelle-le avec une liste vide.`;
+Si rien n'est lisible, appelle-le avec une liste vide.`;
 
 const texte = { type: ["string", "null"] };
 const nombre = { type: ["number", "null"] };
@@ -70,7 +77,9 @@ Deno.serve(async (req) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: acces } = await sb.rpc("verifier_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
     if (!acces) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
-    const { image, visiteId } = await req.json().catch(() => ({}));
+    const { image, visiteId, mode, priseLe } = await req.json().catch(() => ({}));
+    const circulaire = mode === "circulaire";
+    const prise = typeof priseLe === "string" && !Number.isNaN(Date.parse(priseLe)) ? new Date(priseLe).toISOString() : null;
     if (!image || !visiteId) return json({ error: "Photo ou visite manquante." });
 
     const { data: visite } = await sb.from("visites").select("id").eq("id", visiteId).maybeSingle();
@@ -85,14 +94,14 @@ Deno.serve(async (req) => {
       headers: { "x-api-key": cle, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2000,
-        system: CONSIGNES,
+        max_tokens: circulaire ? 8000 : 2000,
+        system: `${circulaire ? INTRO_CIRCULAIRE : INTRO_CARTE}\n${REGLES}`,
         tools: [OUTIL],
         messages: [{
           role: "user",
           content: [
             { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-            { type: "text", text: `Date du jour : ${new Date().toISOString().slice(0, 10)}. Extrais les cartes de prix.` },
+            { type: "text", text: `Date du jour : ${new Date().toISOString().slice(0, 10)}. ${circulaire ? "Extrais toutes les offres de cette page de circulaire." : "Extrais les cartes de prix."}` },
           ],
         }],
       }),
@@ -103,7 +112,7 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const bloc = (msg.content ?? []).find((b: any) => b.type === "tool_use");
     const cartes: Record<string, unknown>[] = Array.isArray(bloc?.input?.cartes) ? bloc.input.cartes : [];
-    if (!cartes.length) return json({ scans: [], message: "Aucune carte de prix lisible sur cette photo." });
+    if (!cartes.length) return json({ scans: [], message: circulaire ? "Aucune offre lisible sur cette page." : "Aucune carte de prix lisible sur cette photo." });
 
     // Photo conservée pour pouvoir vérifier une lecture douteuse (non bloquant si l'envoi échoue).
     let photoPath: string | null = `cartes/${crypto.randomUUID()}.jpg`;
@@ -121,7 +130,7 @@ Deno.serve(async (req) => {
       cup: str(c.cup)?.replace(/\D/g, "") || null,
       code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire),
       categorie: str(c.categorie), icone: str(c.icone)?.toLowerCase() ?? null, cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,
-      confiance: str(c.confiance), photo_path: photoPath,
+      confiance: str(c.confiance), photo_path: photoPath, photo_prise_le: prise, source: circulaire ? "circulaire" : null,
     }));
     const { data, error } = await sb.from("scans").insert(lignes).select();
     if (error) return json({ error: error.message });

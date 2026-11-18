@@ -1,4 +1,7 @@
-// Fonction Edge : renvoie une adresse temporaire pour afficher la photo d'une carte de prix.
+// Fonction Edge : photos des cartes de prix.
+// - { path } ou { path, grande: true } : renvoie une adresse temporaire pour afficher la photo
+//   (la version en haute résolution si elle existe et que « grande » est demandé).
+// - { path, originale } : enregistre la version en haute résolution d'une photo déjà lue.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
@@ -13,9 +16,24 @@ Deno.serve(async (req) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: acces } = await sb.rpc("verifier_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
     if (!acces) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
-    const { path } = await req.json().catch(() => ({}));
-    if (typeof path !== "string" || !/^cartes\/[\w-]+\.jpg$/.test(path)) return json({ error: "Photo introuvable." });
-    const { data, error } = await sb.storage.from("photos").createSignedUrl(path, 600);
+    const { path, grande, originale } = await req.json().catch(() => ({}));
+    const nom = typeof path === "string" ? path.match(/^cartes\/([\w-]+\.jpg)$/)?.[1] : null;
+    if (!nom) return json({ error: "Photo introuvable." });
+    const seau = sb.storage.from("photos");
+
+    if (typeof originale === "string") {
+      const base64 = originale.replace(/^data:image\/\w+;base64,/, "");
+      if (base64.length > 6_000_000) return json({ error: "Photo trop lourde." });
+      const octets = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const { error } = await seau.upload(`originales/${nom}`, octets, { contentType: "image/jpeg", upsert: true });
+      return error ? json({ error: error.message }) : json({ ok: true });
+    }
+
+    if (grande) {
+      const { data } = await seau.createSignedUrl(`originales/${nom}`, 600);
+      if (data?.signedUrl) return json({ url: data.signedUrl, grande: true });
+    }
+    const { data, error } = await seau.createSignedUrl(`cartes/${nom}`, 600);
     if (error) return json({ error: error.message });
     return json({ url: data.signedUrl });
   } catch (e) {

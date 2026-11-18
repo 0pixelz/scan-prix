@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
-import { comparer, grouper, normaliser, prixEffectif, promoUnitaire } from "@/lib/comparaison";
+import { comparer, cupNormalise, grouper, normaliser, prixEffectif, promoUnitaire, variations } from "@/lib/comparaison";
+import { prixParUnite } from "@/lib/unite";
 import { supabaseServer } from "@/lib/supabase";
 import type { ScanAvecVisite } from "@/lib/types";
 
@@ -15,14 +16,27 @@ export async function GET(req: Request) {
   if (!acces) return NextResponse.json({ error: "Accès refusé." }, { status: 401 });
 
   const visiteId = new URL(req.url).searchParams.get("visite");
-  const { data, error } = await supabase
-    .from("scans")
-    .select("*, visites(id, banniere, magasin, date_visite)")
-    .order("created_at", { ascending: true })
-    .limit(10000);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const tout = (data ?? []) as unknown as ScanAvecVisite[];
+  // Lecture par pages de 1000 lignes (limite du service)
+  const tout: ScanAvecVisite[] = [];
+  for (let debut = 0; debut < 50000; debut += 1000) {
+    const { data, error } = await supabase
+      .from("scans")
+      .select("*, visites(id, banniere, magasin, date_visite)")
+      .order("created_at", { ascending: true })
+      .range(debut, debut + 999);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    tout.push(...((data ?? []) as unknown as ScanAvecVisite[]));
+    if (!data || data.length < 1000) break;
+  }
   const lignes = visiteId ? tout.filter((l) => l.visite_id === visiteId) : tout;
+
+  // Prix de référence des produits relevés (par CUP)
+  const references = new Map<string, number>();
+  const cups = [...new Set(tout.map((l) => cupNormalise(l.cup)).filter(Boolean))];
+  for (let i = 0; i < cups.length; i += 150) {
+    const { data } = await supabase.from("reference_prix").select("cup, prix").in("cup", cups.slice(i, i + 150));
+    for (const r of data ?? []) references.set(r.cup as string, Number(r.prix));
+  }
 
   const wb = new ExcelJS.Workbook();
   const entete = (ws: ExcelJS.Worksheet) => {
@@ -106,6 +120,33 @@ export async function GET(req: Request) {
   if (!comparaison.length) cmp.addRow({ produit: "Aucun produit relevé dans deux bannières pour l'instant." });
   entete(cmp);
 
+  // --- Onglet Variations : dernier prix comparé à la visite précédente dans la même bannière ---
+  const vr = wb.addWorksheet("Variations");
+  vr.columns = [
+    { header: "Produit", key: "produit", width: 34 },
+    { header: "Marque", key: "marque", width: 16 },
+    { header: "Format", key: "format", width: 12 },
+    { header: "CUP", key: "cup", width: 16 },
+    { header: "Bannière", key: "banniere", width: 14 },
+    { header: "Date avant", key: "date_avant", width: 12 },
+    { header: "Prix avant", key: "avant", width: 12, style: { numFmt: DOLLARS } },
+    { header: "Date après", key: "date_apres", width: 12 },
+    { header: "Prix après", key: "apres", width: 12, style: { numFmt: DOLLARS } },
+    { header: "Variation ($)", key: "delta", width: 13, style: { numFmt: DOLLARS } },
+    { header: "Variation (%)", key: "pct", width: 13, style: { numFmt: "0.0 %" } },
+  ];
+  const changements = variations(grouper(tout)).filter((c) => !visiteId || c.apres.visite_id === visiteId);
+  changements.forEach((c) => {
+    vr.addRow({
+      produit: c.groupe.nom, marque: c.groupe.marque, format: c.groupe.format, cup: c.groupe.cup, banniere: c.banniere,
+      date_avant: c.avant.visites?.date_visite ?? null, avant: prixEffectif(c.avant),
+      date_apres: c.apres.visites?.date_visite ?? null, apres: prixEffectif(c.apres),
+      delta: c.delta, pct: c.pct / 100,
+    });
+  });
+  if (!changements.length) vr.addRow({ produit: "Aucun changement de prix entre deux visites pour l'instant." });
+  entete(vr);
+
   // --- Onglet Prix : données brutes ---
   const ws = wb.addWorksheet("Prix");
   ws.columns = [
@@ -133,10 +174,19 @@ export async function GET(req: Request) {
     { header: "Confiance", key: "confiance", width: 11 },
     { header: "Notes", key: "notes", width: 24 },
     { header: "Photo prise le", key: "created_at", width: 18 },
+    { header: "Source", key: "source", width: 11 },
+    { header: "Prix par unité", key: "prix_unite", width: 14, style: { numFmt: '#,##0.000 "$"' } },
+    { header: "Unité de comparaison", key: "unite", width: 19 },
+    { header: "Prix de référence", key: "reference", width: 16, style: { numFmt: DOLLARS } },
+    { header: "Écart vs référence ($)", key: "ecart_ref", width: 20, style: { numFmt: DOLLARS } },
+    { header: "Écart vs référence (%)", key: "ecart_ref_pct", width: 20, style: { numFmt: "0.0 %" } },
   ];
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   lignes.forEach((l, i) => {
     const r = i + 2;
+    const paye = prixEffectif(l);
+    const unite = prixParUnite(paye, l.format);
+    const ref = references.get(cupNormalise(l.cup)) ?? null;
     ws.addRow({
       date_visite: l.visites?.date_visite ?? null,
       banniere: l.visites?.banniere ?? null,
@@ -162,7 +212,13 @@ export async function GET(req: Request) {
       prix_unitaire: l.prix_unitaire,
       confiance: l.confiance,
       notes: l.notes,
-      created_at: new Date(l.photo_prise_le ?? l.created_at).toLocaleString("fr-CA", { timeZone: "America/Toronto" }),
+      created_at: new Date(l.photo_prise_le ?? l.created_at).toLocaleString("fr-CA", { timeZone: "America/Toronto", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }),
+      source: l.source === "circulaire" ? "Circulaire" : "Carte",
+      prix_unite: unite ? unite.valeur : null,
+      unite: unite ? unite.unite : null,
+      reference: ref,
+      ecart_ref: ref !== null && paye !== null ? paye - ref : null,
+      ecart_ref_pct: ref !== null && paye !== null && ref > 0 ? (paye - ref) / ref : null,
     });
   });
   entete(ws);

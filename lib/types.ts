@@ -3,6 +3,8 @@ export type Visite = {
   banniere: string;
   magasin: string | null;
   date_visite: string;
+  latitude?: number | null;
+  longitude?: number | null;
   created_at: string;
 };
 
@@ -31,12 +33,15 @@ export type Scan = {
   notes: string | null;
   photo_path: string | null;
   photo_prise_le: string | null;
+  source: string | null; // « circulaire » pour un prix lu sur une page de circulaire
   created_at: string;
 };
 
 export type ScanAvecVisite = Scan & {
   visites: { id: string; banniere: string; magasin: string | null; date_visite: string } | null;
 };
+
+export type Reference = { cup: string; nom: string | null; prix: number };
 
 export type ProduitListe = { id: string; nom: string; cup: string | null; created_at: string };
 

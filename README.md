@@ -9,19 +9,26 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 
 - **Code d'accès** : un code à 4 chiffres est demandé une fois par appareil. Il est vérifié par le serveur
   (5 essais ratés bloquent l'accès 15 minutes) ; sans lui, ni les données ni Claude ne sont accessibles.
-- **Prix** : choisir ou créer une visite (bannière, magasin, date), puis **Photographier** (caméra en continu :
-  un appui par carte, sans quitter la caméra) ou **Importer** plusieurs photos déjà prises. Chaque photo est lue en arrière-plan ; une photo
-  peut contenir plusieurs cartes. Recherche, filtres (promos, à vérifier, doublons, catégorie) et détection
-  des doublons dans la visite.
-- Toucher une ligne pour **corriger** (photo originale affichée), scanner le **code-barres** avec la caméra,
-  ou voir l'**historique** du produit.
+- **Prix** : choisir ou créer une visite (bannière, magasin, date). À la création, la position GPS est notée :
+  à la visite suivante au même endroit (moins de 200 m), le magasin est reconnu et prérempli.
+- **Photographier** : scanner en continu avec cadre de visée, capture automatique, zoom manuel et zoom
+  automatique quand la carte est loin. **Importer** : photos de cartes déjà prises, ou page de circulaire
+  (toutes les offres de la page sont lues d'un coup).
+- **Hors ligne** : chaque photo est gardée sur l'appareil jusqu'à ce qu'elle soit lue. Sans réseau, les photos
+  attendent et partent toutes seules au retour de la connexion, même si l'app a été fermée entre-temps.
+- **Révision rapide** : toucher « À vérifier » fait défiler les lectures incertaines une par une, photo en haut.
+- Toucher une ligne pour **corriger**, agrandir la photo (version haute résolution), scanner le **code-barres**
+  ou voir l'**historique** du produit. Chaque prix affiche son **prix par unité** (100 g, 100 ml ou unité).
 - **Liste** : produits à relever ; ils se cochent tout seuls quand ils sont scannés dans la visite en cours.
-- **Comparer** : le même produit côte à côte dans chaque bannière (dernier prix relevé), avec l'écart en
-  dollars et en pourcentage.
+- **Analyse** :
+  - *Comparer* : le même produit côte à côte dans chaque bannière, écart en dollars et en pourcentage ;
+  - *Tableau de bord* : indice de prix par bannière sur les produits communs, relevés et taux de promos ;
+  - *Variations* : hausses et baisses depuis la visite précédente dans la même bannière ;
+  - *Référence* : import d'un fichier Excel ou CSV (colonnes CUP et Prix) ; chaque relevé affiche son écart.
 - **Assistant** : discussion avec Claude pour résumer, comparer, corriger, gérer la liste, ou lire une photo.
-- **Prix membre et points** : Claude repère les prix réservés aux membres et les offres de points de fidélité ;
-  ils sont affichés sur chaque prix et dans l'Excel.
-- **Excel** : trois onglets — Résumé par visite, Comparaison entre bannières, Prix (données brutes).
+- **Prix membre et points** : repérés par Claude, affichés sur chaque prix et dans l'Excel.
+- **Excel** : quatre onglets — Résumé par visite, Comparaison entre bannières, Variations, Prix (données brutes
+  avec prix par unité, source carte ou circulaire, prix de référence et écart).
 
 ## Installation
 

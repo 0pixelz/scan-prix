@@ -2,19 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabase";
-import { correspond, doublons, grouper, normaliser, promoUnitaire, type Groupe } from "@/lib/comparaison";
-import type { ProduitListe, Scan, Visite } from "@/lib/types";
+import { correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe } from "@/lib/comparaison";
+import { ajouterPhoto, photosEnAttente, retirerPhoto, type PhotoEnAttente } from "@/lib/file";
+import { prixParUnite, texteUnite } from "@/lib/unite";
+import type { ProduitListe, Reference, Scan, Visite } from "@/lib/types";
 import Assistant from "./composants/Assistant";
 import Code from "./composants/Code";
 import Demarrage from "./composants/Demarrage";
 import IconeProduit from "./composants/IconeProduit";
-import Comparer from "./composants/Comparer";
+import Analyse, { type VueAnalyse } from "./composants/Analyse";
+import Revision from "./composants/Revision";
 import Liste from "./composants/Liste";
 import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
-  IAssistant, ICamera, IComparer, ICrayon, IEtiquette, IExport, IListe, IMagasin, IPhotos, IPlus, IRecherche,
-  PastilleBanniere, argent, aujourdhui, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
+  IAssistant, ICamera, IComparer, ICrayon, IEtiquette, IExport, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
 type Onglet = "scan" | "liste" | "comparer" | "assistant" | "visites";
@@ -22,6 +25,11 @@ type Filtre = "tous" | "promos" | "verifier" | "doublons";
 
 export default function Page() {
   const [acces, setAcces] = useState<"verification" | "code" | "ouvert">("verification");
+
+  // Service worker : l'app peut s'ouvrir sans réseau.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") navigator.serviceWorker?.register("/sw.js").catch(() => {});
+  }, []);
 
   // À l'ouverture : le jeton gardé sur l'appareil est-il encore valide ?
   // L'écran d'ouverture reste affiché au moins une seconde, pour ne pas clignoter.
@@ -44,6 +52,8 @@ export default function Page() {
     return () => { fini = true; };
   }, []);
 
+  const refuse = useCallback(() => { ecrireJeton(null); setAcces("code"); }, []);
+
   if (!configOk)
     return (
       <div className="app">
@@ -53,7 +63,7 @@ export default function Page() {
     );
   if (acces === "verification") return <Demarrage />;
   if (acces === "code") return <Code ouvert={() => setAcces("ouvert")} />;
-  return <App refuse={() => { ecrireJeton(null); setAcces("code"); }} />;
+  return <App refuse={refuse} />;
 }
 
 function App({ refuse }: { refuse: () => void }) {
@@ -63,7 +73,14 @@ function App({ refuse }: { refuse: () => void }) {
   const [visite, setVisite] = useState<Visite | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
   const [liste, setListe] = useState<ProduitListe[]>([]);
-  const [enCours, setEnCours] = useState(0);
+  const [enCours, setEnCours] = useState(0); // photos en cours de lecture
+  const [enAttente, setEnAttente] = useState(0); // photos gardées sur l'appareil en attendant le réseau
+  const [horsLigne, setHorsLigne] = useState(false);
+  const [importer, setImporter] = useState(false);
+  const [revision, setRevision] = useState(false);
+  const [vueAnalyse, setVueAnalyse] = useState<VueAnalyse>("comparer");
+  const [refs, setRefs] = useState<Map<string, Reference>>(new Map());
+  const [nbVariations, setNbVariations] = useState(0);
   const [erreur, setErreur] = useState("");
   const [edition, setEdition] = useState<Scan | null>(null);
   const [historique, setHistorique] = useState<Groupe | null>(null);
@@ -78,11 +95,26 @@ function App({ refuse }: { refuse: () => void }) {
   const visiteRef = useRef<Visite | null>(null);
   visiteRef.current = visite;
 
+  // Copie locale des dernières données : l'app reste utilisable sans réseau.
+  const lireCache = <T,>(cle: string): T | null => {
+    try { return JSON.parse(localStorage.getItem(cle) ?? "null") as T | null; } catch { return null; }
+  };
+  const ecrireCache = (cle: string, valeur: unknown) => {
+    try { localStorage.setItem(cle, JSON.stringify(valeur)); } catch { /* stockage plein ou indisponible */ }
+  };
+
   // Visites : on reprend la plus récente à l'ouverture
   useEffect(() => {
     sb.from("visites").select("*").order("created_at", { ascending: false }).limit(200).then(({ data, error }) => {
-      if (error) return setErreur(error.message);
-      const l = (data ?? []) as Visite[];
+      let l = (data ?? []) as Visite[];
+      if (error) {
+        const cache = lireCache<Visite[]>("scanprix.visites");
+        if (!cache) return setErreur(error.message);
+        l = cache;
+        setHorsLigne(true);
+      } else {
+        ecrireCache("scanprix.visites", l);
+      }
       setVisites(l);
       if (l.length) setVisite(l[0]);
       else setNouvelle(true);
@@ -93,61 +125,144 @@ function App({ refuse }: { refuse: () => void }) {
     const v = visiteRef.current;
     if (!v) return setScans([]);
     const { data, error } = await sb.from("scans").select("*").eq("visite_id", v.id).order("created_at", { ascending: false });
-    if (error) setErreur(error.message);
-    else if (visiteRef.current?.id === v.id) setScans((data ?? []) as Scan[]);
+    if (visiteRef.current?.id !== v.id) return;
+    if (error) {
+      const cache = lireCache<{ id: string; scans: Scan[] }>("scanprix.scans");
+      if (cache?.id === v.id) setScans(cache.scans);
+      else setErreur(error.message);
+      return;
+    }
+    setScans((data ?? []) as Scan[]);
+    ecrireCache("scanprix.scans", { id: v.id, scans: data ?? [] });
   }, [sb]);
 
   const chargerListe = useCallback(async () => {
     const { data, error } = await sb.from("liste_produits").select("*").order("created_at");
-    if (error) setErreur(error.message);
-    else setListe((data ?? []) as ProduitListe[]);
+    if (error) setListe(lireCache<ProduitListe[]>("scanprix.liste") ?? []);
+    else {
+      setListe((data ?? []) as ProduitListe[]);
+      ecrireCache("scanprix.liste", data ?? []);
+    }
   }, [sb]);
 
   useEffect(() => { chargerScans(); }, [chargerScans, visite]);
   useEffect(() => { chargerListe(); }, [chargerListe]);
 
-  // File d'attente : chaque photo est lue en arrière-plan, trois à la fois au maximum
-  // (on peut enchaîner les cartes, ou importer d'un coup plusieurs photos déjà prises).
-  const file = useRef<{ fichier: File; visiteId: string }[]>([]);
-  const actifs = useRef(0);
+  // Prix de référence des produits affichés (par CUP)
+  const cups = useMemo(() => [...new Set(scans.map((s) => cupNormalise(s.cup)).filter(Boolean))].sort().join(","), [scans]);
+  useEffect(() => {
+    if (!cups) return setRefs(new Map());
+    let annule = false;
+    chargerReferences(sb, cups.split(",")).then((r) => { if (!annule) setRefs(r); }).catch(() => {});
+    return () => { annule = true; };
+  }, [sb, cups]);
 
-  function avancer() {
-    while (actifs.current < 3 && file.current.length) {
-      const { fichier, visiteId } = file.current.shift()!;
-      actifs.current++;
-      (async () => {
-        try {
-          const [image, priseLe] = await Promise.all([reduire(fichier), datePhoto(fichier)]);
-          const { data: json, error } = await sb.functions.invoke("scan", { body: { image, visiteId } });
-          if (error) throw new Error("Service de lecture indisponible. Réessaie dans un instant.");
-          if (json.acces === false) return refuse();
-          if (json.error) throw new Error(json.error);
-          if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
-          else {
-            // On note le moment où la photo a été prise (utile surtout pour les photos importées).
-            const nouveaux = (json.scans as Scan[]).map((s) => ({ ...s, photo_prise_le: priseLe }));
-            sb.from("scans").update({ photo_prise_le: priseLe }).in("id", nouveaux.map((s) => s.id)).then(() => {});
-            if (visiteRef.current?.id === visiteId) setScans((s) => [...nouveaux, ...s]);
-          }
-        } catch (e) {
-          setErreur(e instanceof Error ? e.message : "Erreur inconnue");
-        } finally {
-          actifs.current--;
-          setEnCours((n) => n - 1);
-          avancer();
+  // Changements de prix de cette visite par rapport à la visite précédente dans la même bannière
+  const visiteId = visite?.id;
+  useEffect(() => {
+    setNbVariations(0);
+    if (!visiteId || enCours > 0) return;
+    let annule = false;
+    chargerTout(sb)
+      .then((tout) => { if (!annule) setNbVariations(variations(grouper(tout)).filter((c) => c.apres.visite_id === visiteId).length); })
+      .catch(() => {});
+    return () => { annule = true; };
+  }, [sb, visiteId, enCours]);
+
+  // File d'attente des photos, gardée sur l'appareil : chaque photo y reste jusqu'à ce qu'elle soit lue.
+  // Trois lectures à la fois au maximum ; sans réseau, les photos attendent et repartent toutes seules.
+  const traitement = useRef(new Set<string>());
+  const memoire = useRef(new Map<string, PhotoEnAttente>()); // secours si le stockage de l'appareil est indisponible
+
+  const compter = useCallback(async () => {
+    let total = memoire.current.size;
+    try { total += (await photosEnAttente()).length; } catch { /* stockage indisponible */ }
+    setEnCours(traitement.current.size);
+    setEnAttente(Math.max(0, total - traitement.current.size));
+  }, []);
+
+  const traiterFile = useCallback(async () => {
+    let photos: PhotoEnAttente[] = [...memoire.current.values()];
+    try { photos = [...photos, ...(await photosEnAttente())]; } catch { /* stockage indisponible */ }
+
+    const lire = async (p: PhotoEnAttente) => {
+      traitement.current.add(p.id);
+      compter();
+      let reseauCoupe = false;
+      const retirer = async () => {
+        memoire.current.delete(p.id);
+        await retirerPhoto(p.id).catch(() => {});
+      };
+      try {
+        const { data: json, error } = await sb.functions.invoke("scan", {
+          body: { image: p.image, visiteId: p.visiteId, mode: p.mode, priseLe: p.priseLe },
+        });
+        if (error) {
+          // Pas de réseau : la photo reste en attente. Autre panne du service : on le dit, et la photo reste aussi.
+          reseauCoupe = true;
+          setHorsLigne(true);
+          if (error.name !== "FunctionsFetchError" && navigator.onLine) setErreur("Service de lecture indisponible. Les photos restent en attente.");
+          return;
         }
-      })();
-    }
-  }
+        setHorsLigne(false);
+        if (json.acces === false) {
+          reseauCoupe = true; // code à entrer de nouveau : la photo reste en attente
+          return refuse();
+        }
+        await retirer();
+        if (json.error) throw new Error(json.error);
+        if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
+        else {
+          if (visiteRef.current?.id === p.visiteId) setScans((s) => [...(json.scans as Scan[]), ...s]);
+          // Photo en haute résolution, gardée pour le zoom
+          const chemin = (json.scans as Scan[])[0]?.photo_path;
+          if (p.originale && chemin) sb.functions.invoke("photo", { body: { path: chemin, originale: p.originale } }).catch(() => {});
+        }
+      } catch (e) {
+        setErreur(e instanceof Error ? e.message : "Erreur inconnue");
+      } finally {
+        traitement.current.delete(p.id);
+        await compter();
+        if (!reseauCoupe) traiterFile();
+      }
+    };
 
-  function photographier(files: FileList | File[] | null) {
+    for (const p of photos) {
+      if (traitement.current.size >= 3) break;
+      if (!traitement.current.has(p.id)) lire(p);
+    }
+    compter();
+  }, [sb, compter, refuse]);
+
+  // Relance : à l'ouverture, au retour du réseau, et toutes les 20 secondes s'il reste des photos en attente.
+  useEffect(() => {
+    traiterFile();
+    const retour = () => { setHorsLigne(false); traiterFile(); chargerScans(); };
+    const coupure = () => setHorsLigne(true);
+    window.addEventListener("online", retour);
+    window.addEventListener("offline", coupure);
+    const minuterie = setInterval(() => { if (navigator.onLine) traiterFile(); }, 20000);
+    return () => {
+      window.removeEventListener("online", retour);
+      window.removeEventListener("offline", coupure);
+      clearInterval(minuterie);
+    };
+  }, [traiterFile, chargerScans]);
+
+  async function photographier(files: FileList | File[] | null, mode: "carte" | "circulaire" = "carte") {
     const v = visiteRef.current;
     if (!files?.length || !v) return;
     setErreur("");
-    const ajouts = Array.from(files).map((fichier) => ({ fichier, visiteId: v.id }));
-    file.current.push(...ajouts);
-    setEnCours((n) => n + ajouts.length);
-    avancer();
+    for (const fichier of Array.from(files)) {
+      try {
+        const [{ image, originale }, priseLe] = await Promise.all([reduire(fichier), datePhoto(fichier)]);
+        const p: PhotoEnAttente = { id: crypto.randomUUID(), visiteId: v.id, image, originale, priseLe, mode };
+        await ajouterPhoto(p).catch(() => { memoire.current.set(p.id, p); });
+      } catch {
+        setErreur("Photo illisible : elle n'a pas été ajoutée.");
+      }
+    }
+    traiterFile();
   }
 
   async function exporter(v: Visite | null) {
@@ -215,7 +330,8 @@ function App({ refuse }: { refuse: () => void }) {
     const texte = normaliser([s.produit, s.marque, s.format, s.cup, s.code_article, s.categorie].filter(Boolean).join(" "));
     return mots.every((m) => texte.includes(m));
   });
-  const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Comparer", assistant: "Assistant", visites: "Visites" };
+  const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Analyse", assistant: "Assistant", visites: "Visites" };
+  const aVerifier = scans.filter((s) => s.confiance && s.confiance !== "haute");
   const puce = (f: Filtre, libelle: string, n: number) => (
     <button className={filtre === f ? "on" : ""} onClick={() => setFiltre(f)}>{libelle} ({n})</button>
   );
@@ -264,10 +380,32 @@ function App({ refuse }: { refuse: () => void }) {
               <div className="stats">
                 <div className="stat"><small>Prix</small><b>{scans.length}</b></div>
                 <div className="stat"><small>Promos</small><b>{nbPromos}</b></div>
-                <div className="stat"><small>À vérifier</small><b>{nbVerif}</b></div>
+                <button className={`stat ${nbVerif ? "action" : ""}`} disabled={!nbVerif} onClick={() => setRevision(true)}>
+                  <small>À vérifier</small><b>{nbVerif}</b>{nbVerif > 0 && <em>Réviser</em>}
+                </button>
               </div>
 
+              {(horsLigne || enAttente > 0) && (
+                <div className="alert avis">
+                  <span className="row"><IHorsLigne />
+                    {enAttente > 0
+                      ? `${horsLigne ? "Hors ligne : " : ""}${enAttente} photo${enAttente > 1 ? "s" : ""} en attente. ${horsLigne ? "Elles seront lues au retour du réseau." : "Lecture à venir."}`
+                      : "Hors ligne : les photos seront gardées et lues au retour du réseau."}
+                  </span>
+                  {enAttente > 0 && navigator.onLine && <button className="small" onClick={() => traiterFile()}>Réessayer</button>}
+                </div>
+              )}
               {enCours > 0 && <div className="alert info">Lecture de {enCours} photo{enCours > 1 ? "s" : ""} en cours…</div>}
+
+              {nbVariations > 0 && (
+                <div className="card lien" role="button" onClick={() => { setVueAnalyse("variations"); setOnglet("comparer"); }}>
+                  <div className="ic soft"><IComparer /></div>
+                  <div className="grow">
+                    <b>{nbVariations} changement{nbVariations > 1 ? "s" : ""} de prix</b>
+                    <div className="muted">Depuis ta visite précédente chez {visite.banniere}</div>
+                  </div>
+                </div>
+              )}
 
               {enDouble.size > 0 && (
                 <div className="alert avis">
@@ -331,6 +469,9 @@ function App({ refuse }: { refuse: () => void }) {
                 {scans.length > 0 && !visibles.length && <div className="empty"><div>Aucun prix ne correspond.</div></div>}
                 {visibles.map((s) => {
                   const pu = promoUnitaire(s);
+                  const unite = prixParUnite(prixEffectif(s), s.format);
+                  const ref = refs.get(cupNormalise(s.cup));
+                  const ecartRef = ref && prixEffectif(s) !== null ? ((prixEffectif(s)! - ref.prix) / ref.prix) * 100 : null;
                   return (
                     <div key={s.id} className="tx" role="button" onClick={() => setEdition(s)}>
                       <IconeProduit icone={s.icone} categorie={s.categorie} />
@@ -344,6 +485,12 @@ function App({ refuse }: { refuse: () => void }) {
                             {s.date_fin ? ` · jusqu'au ${dateLisible(s.date_fin)}` : ""}
                           </span>
                         )}{" "}
+                        {s.source === "circulaire" && <span className="pill membre">Circulaire</span>}{" "}
+                        {ecartRef !== null && (
+                          <span className={`pill ${ecartRef < -0.05 ? "baisse" : ecartRef > 0.05 ? "hausse" : "membre"}`}>
+                            Réf. {argent(ref!.prix)} · {ecartRef > 0 ? "+" : ""}{ecartRef.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %
+                          </span>
+                        )}{" "}
                         {s.prix_membre && <span className="pill membre">Prix membre</span>}{" "}
                         {s.points ? <span className="pill pts">{s.points.toLocaleString("fr-CA")} points</span> : null}{" "}
                         {s.confiance && s.confiance !== "haute" && <span className="pill verif">À vérifier</span>}{" "}
@@ -352,6 +499,7 @@ function App({ refuse }: { refuse: () => void }) {
                       <div className="r">
                         <b>{argent(pu ?? s.prix_regulier)}</b>
                         {pu !== null && s.prix_regulier !== null && <span className="old">{argent(s.prix_regulier)}</span>}
+                        {unite && <small>{texteUnite(unite)}</small>}
                       </div>
                     </div>
                   );
@@ -364,7 +512,7 @@ function App({ refuse }: { refuse: () => void }) {
 
       {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} />}
 
-      {onglet === "comparer" && <Comparer historique={setHistorique} />}
+      {onglet === "comparer" && <Analyse key={vueAnalyse} historique={setHistorique} vueInitiale={vueAnalyse} visiteId={visite?.id ?? null} refuse={refuse} />}
 
       {onglet === "assistant" && <Assistant visite={visite} modifie={() => { chargerScans(); chargerListe(); }} refuse={refuse} />}
 
@@ -401,10 +549,9 @@ function App({ refuse }: { refuse: () => void }) {
             <button className="principal" onClick={() => setRafale(true)}>
               <ICamera /> Photographier
             </button>
-            <label className="secondaire" aria-label="Importer des photos déjà prises">
+            <button className="secondaire" onClick={() => setImporter(true)}>
               <IPhotos /> Importer
-              <input type="file" accept="image/*" multiple onChange={(e) => { photographier(e.target.files); e.target.value = ""; }} />
-            </label>
+            </button>
           </div>
         </div>
       )}
@@ -412,13 +559,14 @@ function App({ refuse }: { refuse: () => void }) {
       <nav>
         <button className={onglet === "scan" ? "on" : ""} onClick={() => setOnglet("scan")}><IEtiquette />Prix</button>
         <button className={onglet === "liste" ? "on" : ""} onClick={() => setOnglet("liste")}><IListe />Liste</button>
-        <button className={onglet === "comparer" ? "on" : ""} onClick={() => setOnglet("comparer")}><IComparer />Comparer</button>
+        <button className={onglet === "comparer" ? "on" : ""} onClick={() => { setVueAnalyse("comparer"); setOnglet("comparer"); }}><IComparer />Analyse</button>
         <button className={onglet === "assistant" ? "on" : ""} onClick={() => setOnglet("assistant")}><IAssistant />Assistant</button>
         <button className={onglet === "visites" ? "on" : ""} onClick={() => setOnglet("visites")}><IMagasin />Visites</button>
       </nav>
 
       {nouvelle && (
         <NouvelleVisite
+          connues={visites}
           fermer={visites.length ? () => setNouvelle(false) : undefined}
           creee={(v) => { setVisites((l) => [v, ...l]); setVisite(v); setNouvelle(false); setOnglet("scan"); }}
         />
@@ -452,6 +600,38 @@ function App({ refuse }: { refuse: () => void }) {
           enregistre={(s) => { setScans((l) => l.map((x) => (x.id === s.id ? s : x))); setEdition(null); }}
           supprime={(id) => { setScans((l) => l.filter((x) => x.id !== id)); setEdition(null); }}
           historique={ouvrirHistorique}
+        />
+      )}
+
+      {importer && (
+        <div className="sheet" onClick={(e) => e.target === e.currentTarget && setImporter(false)}>
+          <div className="panel">
+            <div className="grip" />
+            <div className="row between">
+              <h3>Importer</h3>
+              <button type="button" className="ghost" onClick={() => setImporter(false)}>Fermer</button>
+            </div>
+            <div className="choix">
+              <label>
+                <div className="ic soft"><IPhotos /></div>
+                <span><b>Photos de cartes de prix</b><small>Une ou plusieurs photos déjà prises avec ton téléphone.</small></span>
+                <input type="file" accept="image/*" multiple onChange={(e) => { photographier(e.target.files); e.target.value = ""; setImporter(false); }} />
+              </label>
+              <label>
+                <div className="ic soft"><IJournal /></div>
+                <span><b>Page de circulaire</b><small>Photo ou capture d'une page : tous les prix de la page sont lus d'un coup. Cadre une demi-page à la fois pour les petits caractères.</small></span>
+                <input type="file" accept="image/*" multiple onChange={(e) => { photographier(e.target.files, "circulaire"); e.target.value = ""; setImporter(false); }} />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revision && (
+        <Revision
+          scans={aVerifier}
+          fermer={() => setRevision(false)}
+          modifie={(m) => setScans((l) => l.map((x) => (x.id === m.id ? m : x)))}
         />
       )}
 

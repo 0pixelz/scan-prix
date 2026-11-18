@@ -39,10 +39,24 @@ alter table public.scans enable row level security;
 alter table public.scans add column if not exists categorie text;
 alter table public.scans add column if not exists cle_produit text;
 alter table public.scans add column if not exists photo_prise_le timestamptz; -- moment où la photo a été prise
+alter table public.scans add column if not exists source text; -- « circulaire » pour un prix lu sur une page de circulaire
 alter table public.scans add column if not exists prix_membre boolean; -- prix réservé aux membres
 alter table public.scans add column if not exists points integer;      -- points de fidélité offerts
 alter table public.scans add column if not exists points_details text; -- programme et condition
 alter table public.scans add column if not exists icone text; -- type de produit (icône), choisi par Claude
+
+-- Position GPS d'une visite : sert à reconnaître le magasin à la visite suivante
+alter table public.visites add column if not exists latitude double precision;
+alter table public.visites add column if not exists longitude double precision;
+
+-- Liste de prix de référence (importée d'un fichier Excel ou CSV), par CUP sans zéros de tête
+create table if not exists public.reference_prix (
+  cup text primary key,
+  nom text,
+  prix numeric(10, 2) not null,
+  importe_le timestamptz not null default now()
+);
+alter table public.reference_prix enable row level security;
 
 -- Liste des produits à relever
 create table if not exists public.liste_produits (
@@ -111,6 +125,8 @@ create policy "visites sans compte" on public.visites for all to anon
 create policy "scans sans compte" on public.scans for all to anon
   using ((select public.jeton_valide())) with check ((select public.jeton_valide()));
 create policy "liste avec jeton" on public.liste_produits for all to anon
+  using ((select public.jeton_valide())) with check ((select public.jeton_valide()));
+create policy "reference avec jeton" on public.reference_prix for all to anon
   using ((select public.jeton_valide())) with check ((select public.jeton_valide()));
 
 -- Photos : bucket privé, lu et écrit uniquement par les fonctions Edge.

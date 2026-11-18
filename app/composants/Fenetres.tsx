@@ -2,15 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
-import { prixEffectif, type Groupe } from "@/lib/comparaison";
+import { cupNormalise, distanceMetres, prixEffectif, type Groupe } from "@/lib/comparaison";
+import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
-import { CATEGORIES, type Scan, type Visite } from "@/lib/types";
+import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
 import Visionneuse from "./Visionneuse";
-import { BANNIERES, ICodeBarres, PastilleBanniere, argent, aujourdhui, dateLisible, logoBanniere } from "./ui";
+import { BANNIERES, ICodeBarres, IPosition, PastilleBanniere, argent, aujourdhui, chargerReferences, dateLisible, logoBanniere } from "./ui";
 
 /** Création d'une visite, ou modification d'une visite existante (bannière, magasin, date). */
-export function NouvelleVisite({ visite, fermer, creee, supprimee }: {
+export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
   visite?: Visite;
+  connues?: Visite[]; // visites déjà faites : leur position sert à reconnaître le magasin
   fermer?: () => void;
   creee: (v: Visite) => void;
   supprimee?: (id: string) => void;
@@ -21,10 +23,47 @@ export function NouvelleVisite({ visite, fermer, creee, supprimee }: {
   const [date, setDate] = useState(visite?.date_visite ?? aujourdhui());
   const [erreur, setErreur] = useState("");
   const [confirmer, setConfirmer] = useState(false);
+  const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [reconnu, setReconnu] = useState<Visite | null>(null);
+  const [gps, setGps] = useState<"recherche" | "trouve" | "absent">("recherche");
+  const touche = useRef(false); // vrai dès que l'utilisateur choisit lui-même : on ne remplit plus à sa place
+
+  // Nouvelle visite : on lit la position pour reconnaître un magasin déjà visité (à moins de 200 m).
+  useEffect(() => {
+    if (visite) return;
+    if (!navigator.geolocation) return setGps("absent");
+    let annule = false;
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        if (annule) return;
+        const ici = { latitude: p.coords.latitude, longitude: p.coords.longitude };
+        setPosition(ici);
+        setGps("trouve");
+        const proche = (connues ?? [])
+          .filter((v) => typeof v.latitude === "number" && typeof v.longitude === "number")
+          .map((v) => ({ v, d: distanceMetres(ici, { latitude: v.latitude!, longitude: v.longitude! }) }))
+          .filter((x) => x.d <= 200)
+          .sort((a, b) => a.d - b.d)[0]?.v;
+        if (proche && !touche.current) {
+          setReconnu(proche);
+          setBanniere(proche.banniere);
+          setAutre(!BANNIERES.includes(proche.banniere));
+          setMagasin(proche.magasin ?? "");
+        }
+      },
+      () => { if (!annule) setGps("absent"); },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+    );
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function enregistrer(e: React.FormEvent) {
     e.preventDefault();
-    const valeurs = { banniere: banniere.trim(), magasin: magasin.trim() || null, date_visite: date };
+    const valeurs = {
+      banniere: banniere.trim(), magasin: magasin.trim() || null, date_visite: date,
+      ...(!visite && position ? position : {}),
+    };
     const table = supabaseBrowser().from("visites");
     const { data, error } = visite
       ? await table.update(valeurs).eq("id", visite.id).select().single()
@@ -45,10 +84,22 @@ export function NouvelleVisite({ visite, fermer, creee, supprimee }: {
       <form className="panel" onSubmit={enregistrer}>
         <div className="grip" />
         <h3>{visite ? "Modifier la visite" : "Nouvelle visite"}</h3>
+        {!visite && (
+          <div className={`gps ${reconnu ? "ok" : ""}`}>
+            <IPosition />
+            {reconnu
+              ? `Magasin reconnu : ${reconnu.banniere}${reconnu.magasin ? ` · ${reconnu.magasin}` : ""}`
+              : gps === "recherche"
+                ? "Recherche de ta position…"
+                : gps === "trouve"
+                  ? "Position notée : ce magasin sera reconnu à ta prochaine visite."
+                  : "Position non disponible : choisis le magasin à la main."}
+          </div>
+        )}
         <label>Bannière</label>
         <div className="tuiles">
           {BANNIERES.map((b, i) => (
-            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { setAutre(false); setBanniere(b); }}>
+            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { touche.current = true; setReconnu(null); setAutre(false); setBanniere(b); }}>
               {logoBanniere(b) ? (
                 <img className="logo" src={logoBanniere(b)!} alt="" />
               ) : (
@@ -57,14 +108,14 @@ export function NouvelleVisite({ visite, fermer, creee, supprimee }: {
               {b}
             </button>
           ))}
-          <button type="button" className={autre ? "on" : ""} aria-pressed={autre} onClick={() => { setAutre(true); setBanniere(""); }}>
+          <button type="button" className={autre ? "on" : ""} aria-pressed={autre} onClick={() => { touche.current = true; setReconnu(null); setAutre(true); setBanniere(""); }}>
             <span style={{ "--h": 215 } as React.CSSProperties}>+</span>
             Autre
           </button>
         </div>
         {autre && <input style={{ marginTop: 10 }} value={banniere} onChange={(e) => setBanniere(e.target.value)} placeholder="Nom de la bannière" autoFocus={!visite} />}
         <label>Magasin (ville, succursale)</label>
-        <input value={magasin} onChange={(e) => setMagasin(e.target.value)} placeholder="Ex. Mirabel" />
+        <input value={magasin} onChange={(e) => { touche.current = true; setMagasin(e.target.value); }} placeholder="Ex. Mirabel" />
         <label>Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
@@ -160,8 +211,15 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
 
   useEffect(() => {
     if (!scan.photo_path) return;
-    sb.functions.invoke("photo", { body: { path: scan.photo_path } }).then(({ data }) => setPhoto(data?.url ?? null));
+    sb.functions.invoke("photo", { body: { path: scan.photo_path, grande: true } }).then(({ data }) => setPhoto(data?.url ?? null));
   }, [sb, scan.photo_path]);
+
+  const [reference, setReference] = useState<Reference | null>(null);
+  useEffect(() => {
+    chargerReferences(sb, [scan.cup]).then((r) => setReference(r.get(cupNormalise(scan.cup)) ?? null)).catch(() => {});
+  }, [sb, scan.cup]);
+  const paye = prixEffectif(scan);
+  const unite = prixParUnite(paye, scan.format);
 
   const champ = (k: string, libelle: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
     <div>
@@ -210,6 +268,20 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
           <h3>Modifier le prix</h3>
           <button type="button" className="ghost" onClick={fermer}>Fermer</button>
         </div>
+        {(unite || reference) && (
+          <div className="resume">
+            {unite && <div><span>Prix par unité</span><b>{texteUnite(unite)}</b></div>}
+            {reference && (
+              <div>
+                <span>Ma référence</span>
+                <b>
+                  {argent(reference.prix)}
+                  {paye !== null && <em className={paye < reference.prix ? "baisse" : paye > reference.prix ? "hausse" : ""}> {paye > reference.prix ? "+" : ""}{(((paye - reference.prix) / reference.prix) * 100).toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %</em>}
+                </b>
+              </div>
+            )}
+          </div>
+        )}
         {champ("produit", "Produit")}
         <div className="grid2">
           {champ("marque", "Marque")}
