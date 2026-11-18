@@ -6,6 +6,7 @@ import { correspond, doublons, grouper, normaliser, promoUnitaire, type Groupe }
 import type { ProduitListe, Scan, Visite } from "@/lib/types";
 import Assistant from "./composants/Assistant";
 import Code from "./composants/Code";
+import Demarrage from "./composants/Demarrage";
 import IconeProduit from "./composants/IconeProduit";
 import Comparer from "./composants/Comparer";
 import Liste from "./composants/Liste";
@@ -23,14 +24,24 @@ export default function Page() {
   const [acces, setAcces] = useState<"verification" | "code" | "ouvert">("verification");
 
   // À l'ouverture : le jeton gardé sur l'appareil est-il encore valide ?
+  // L'écran d'ouverture reste affiché au moins une seconde, pour ne pas clignoter.
   useEffect(() => {
     if (!configOk) return;
-    if (!lireJeton()) return setAcces("code");
-    supabaseBrowser().rpc("jeton_valide").then(({ data, error }) => {
-      if (error) return setAcces("ouvert"); // hors ligne : on laisse entrer, les données resteront protégées par le serveur
-      if (!data) ecrireJeton(null);
-      setAcces(data ? "ouvert" : "code");
-    });
+    const debut = Date.now();
+    let fini = false;
+    const ouvrir = (etat: "code" | "ouvert") => {
+      const attente = Math.max(0, 1100 - (Date.now() - debut));
+      setTimeout(() => { if (!fini) setAcces(etat); }, attente);
+    };
+    if (!lireJeton()) ouvrir("code");
+    else {
+      supabaseBrowser().rpc("jeton_valide").then(({ data, error }) => {
+        if (error) return ouvrir("ouvert"); // hors ligne : on laisse entrer, les données resteront protégées par le serveur
+        if (!data) ecrireJeton(null);
+        ouvrir(data ? "ouvert" : "code");
+      });
+    }
+    return () => { fini = true; };
   }, []);
 
   if (!configOk)
@@ -40,7 +51,7 @@ export default function Page() {
         <main><div className="alert">Configuration manquante : ajoute NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY (voir le README).</div></main>
       </div>
     );
-  if (acces === "verification") return <div className="app" />;
+  if (acces === "verification") return <Demarrage />;
   if (acces === "code") return <Code ouvert={() => setAcces("ouvert")} />;
   return <App refuse={() => { ecrireJeton(null); setAcces("code"); }} />;
 }

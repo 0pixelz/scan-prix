@@ -3,7 +3,7 @@ import type { ScanAvecVisite } from "@/lib/types";
 
 export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C"];
 
-const LOGOS = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro"];
+const LOGOS = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro", "superc"];
 
 /** Adresse du logo d'une bannière (fichiers fournis dans public/bannieres), ou null si on n'en a pas. */
 export function logoBanniere(banniere: string | null | undefined): string | null {

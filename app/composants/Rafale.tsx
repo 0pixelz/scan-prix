@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HAUTEUR, IMAGES_STABLES, LARGEUR, SEUIL_DEPLACEMENT, SEUIL_IMMOBILE, analyser, ecart, enGris, grossier } from "@/lib/detection";
+import { HAUTEUR, IMAGES_STABLES, LARGEUR, SEUIL_DEPLACEMENT, SEUIL_IMMOBILE, analyser, bandeCarte, ecart, enGris, grossier, zoomPour } from "@/lib/detection";
 import { ICamera } from "./ui";
 
 const CLE_AUTO = "scanprix.auto";
-type Etat = "cherche" | "stable" | "attente";
+type Etat = "cherche" | "zoom" | "stable" | "attente";
+const PALIERS = [1, 2, 3];
 
 /**
  * Scanner en continu : un cadre de visée, et la photo se prend toute seule quand une carte de prix
- * est bien cadrée et immobile (mode Auto). Seul le contenu du cadre est envoyé en lecture.
+ * est bien cadrée et immobile (mode Auto). Si la carte est petite dans le cadre (on est loin), le zoom
+ * s'ajuste tout seul. Zoom manuel : boutons 1×, 2×, 3× ou pincement. Seul le contenu du cadre est envoyé en lecture.
  * Le déclencheur manuel reste toujours disponible.
  */
 export default function Rafale({ fermer, photo, enCours }: {
@@ -30,6 +32,27 @@ export default function Rafale({ fermer, photo, enCours }: {
   const [progres, setProgres] = useState(0);
   const [torche, setTorche] = useState<boolean | null>(null); // null : lampe non disponible
   const armee = useRef(true); // faux après une capture, jusqu'à ce que la caméra se déplace
+  // Zoom : celui choisi à la main, multiplié par le zoom automatique (carte éloignée).
+  const [zoom, setZoom] = useState(1); // zoom total affiché
+  const manuel = useRef(1);
+  const automatique = useRef(1);
+  const materiel = useRef<{ min: number; max: number; base: number } | null>(null); // zoom de l'appareil photo, s'il existe
+  const zoomMax = useRef(4);
+  const [echelle, setEchelle] = useState(1); // zoom numérique (agrandissement de l'image) quand l'appareil n'a pas de zoom
+
+  const appliquerZoom = useCallback(() => {
+    const z = Math.max(1, Math.min(zoomMax.current, manuel.current * automatique.current));
+    setZoom(z);
+    const m = materiel.current;
+    if (m && piste.current) {
+      piste.current.applyConstraints({ advanced: [{ zoom: Math.min(m.max, m.base * z) } as MediaTrackConstraintSet] }).catch(() => {
+        materiel.current = null; // zoom de l'appareil refusé : on passe au zoom numérique
+        setEchelle(z);
+      });
+    } else {
+      setEchelle(z);
+    }
+  }, []);
 
   useEffect(() => {
     try { setAuto(localStorage.getItem(CLE_AUTO) !== "non"); } catch { /* stockage indisponible */ }
@@ -37,13 +60,18 @@ export default function Rafale({ fermer, photo, enCours }: {
     let fini = false;
     if (!navigator.mediaDevices?.getUserMedia) return setErreur(true);
     navigator.mediaDevices
-      .getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 2560 }, height: { ideal: 1440 } } })
+      .getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } } })
       .then((s) => {
         if (fini) return s.getTracks().forEach((t) => t.stop());
         flux = s;
         piste.current = s.getVideoTracks()[0] ?? null;
-        const capacites = piste.current?.getCapabilities?.() as { torch?: boolean } | undefined;
+        const capacites = piste.current?.getCapabilities?.() as { torch?: boolean; zoom?: { min: number; max: number } } | undefined;
         if (capacites?.torch) setTorche(false);
+        if (capacites?.zoom && capacites.zoom.max > capacites.zoom.min) {
+          const base = Math.max(1, capacites.zoom.min);
+          materiel.current = { min: capacites.zoom.min, max: capacites.zoom.max, base };
+          zoomMax.current = Math.min(6, capacites.zoom.max / base);
+        }
         if (video.current) {
           video.current.srcObject = s;
           video.current.play().catch(() => {});
@@ -108,6 +136,9 @@ export default function Rafale({ fermer, photo, enCours }: {
     let precedente: Float32Array | null = null;
     let stables = 0;
     let deplacements = 0;
+    let loin = 0; // mesures consécutives où la carte est petite dans le cadre
+    let perdue = 0; // mesures consécutives sans carte alors que le zoom automatique est actif
+    let zoomBloque = false; // après un zoom automatique sans résultat, on attend que la caméra se déplace
     const minuterie = setInterval(() => {
       const z = zone(0);
       if (!z || !video.current) return;
@@ -123,6 +154,10 @@ export default function Rafale({ fermer, photo, enCours }: {
         if (deplacements >= 2) {
           armee.current = true;
           deplacements = 0;
+          if (automatique.current !== 1) {
+            automatique.current = 1; // nouvelle carte : on repart du zoom choisi à la main
+            appliquerZoom();
+          }
           setEtat("cherche");
         }
         return;
@@ -137,12 +172,63 @@ export default function Rafale({ fermer, photo, enCours }: {
         }
       } else {
         stables = 0;
-        setEtat("cherche");
         setProgres(0);
+        // Carte petite dans le cadre et caméra à peu près immobile : on est loin, on zoome.
+        const b = mouvement < SEUIL_IMMOBILE * 1.5 ? bandeCarte(gris) : null;
+        if (mouvement > SEUIL_DEPLACEMENT) zoomBloque = false;
+        const facteur = b && !zoomBloque ? zoomPour(b) : 1;
+        if (facteur > 1 && manuel.current * automatique.current < zoomMax.current - 0.05) {
+          perdue = 0;
+          if (++loin >= 3) {
+            loin = 0;
+            automatique.current = Math.min(zoomMax.current / manuel.current, automatique.current * facteur);
+            appliquerZoom();
+            setEtat("zoom");
+          }
+        } else {
+          loin = 0;
+          // Plus rien dans le cadre depuis environ deux secondes : on annule le zoom automatique.
+          if (automatique.current > 1 && ++perdue >= 12) {
+            perdue = 0;
+            automatique.current = 1;
+            zoomBloque = true;
+            appliquerZoom();
+          }
+          setEtat((e) => (e === "zoom" && automatique.current > 1 ? "zoom" : "cherche"));
+        }
       }
     }, 160);
     return () => clearInterval(minuterie);
-  }, [pret, auto, erreur, zone, prendre]);
+  }, [pret, auto, erreur, zone, prendre, appliquerZoom]);
+
+  function choisirZoom(z: number) {
+    manuel.current = Math.max(1, Math.min(zoomMax.current, z));
+    automatique.current = 1;
+    appliquerZoom();
+  }
+
+  // Pincement à deux doigts sur l'image pour zoomer.
+  const doigts = useRef(new Map<number, { x: number; y: number }>());
+  const pince = useRef<{ distance: number; zoom: number } | null>(null);
+  const ecartDoigts = () => {
+    const p = [...doigts.current.values()];
+    return p.length < 2 ? 0 : Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+  };
+  function doigtPose(ev: React.PointerEvent) {
+    doigts.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (doigts.current.size === 2) pince.current = { distance: ecartDoigts(), zoom: manuel.current * automatique.current };
+  }
+  function doigtBouge(ev: React.PointerEvent) {
+    if (!doigts.current.has(ev.pointerId)) return;
+    doigts.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pince.current && doigts.current.size === 2 && pince.current.distance > 0) {
+      choisirZoom((pince.current.zoom * ecartDoigts()) / pince.current.distance);
+    }
+  }
+  function doigtLeve(ev: React.PointerEvent) {
+    doigts.current.delete(ev.pointerId);
+    if (doigts.current.size < 2) pince.current = null;
+  }
 
   function basculerAuto() {
     const suivant = !auto;
@@ -167,12 +253,14 @@ export default function Rafale({ fermer, photo, enCours }: {
     ? "Cadre la carte, puis appuie sur le bouton"
     : etat === "stable"
       ? "Ne bouge plus…"
-      : etat === "attente"
-        ? "Capturée. Passe à la carte suivante."
+      : etat === "zoom"
+        ? "Carte éloignée : zoom automatique"
+        : etat === "attente"
+          ? "Capturée. Passe à la carte suivante."
         : "Place une carte de prix dans le cadre";
 
   return (
-    <div className="rafale">
+    <div className="rafale" onPointerDown={doigtPose} onPointerMove={doigtBouge} onPointerUp={doigtLeve} onPointerCancel={doigtLeve}>
       {erreur ? (
         <>
           <div className="haut"><span /><button onClick={fermer}>Terminer</button></div>
@@ -186,7 +274,7 @@ export default function Rafale({ fermer, photo, enCours }: {
         </>
       ) : (
         <>
-          <video ref={video} playsInline muted autoPlay onLoadedMetadata={() => setPret(true)} />
+          <video ref={video} playsInline muted autoPlay onLoadedMetadata={() => setPret(true)} style={{ transform: `scale(${echelle})` }} />
           <div ref={cadre} className={`cadre ${auto ? etat : "manuel"}`}>
             <i className="hg" /><i className="hd" /><i className="bg" /><i className="bd" />
             {auto && etat === "cherche" && <span className="balayage" />}
@@ -202,6 +290,13 @@ export default function Rafale({ fermer, photo, enCours }: {
           </div>
 
           <div className={`conseil ${auto ? etat : ""}`} role="status">{conseil}</div>
+
+          <div className="zooms" role="group" aria-label="Zoom">
+            {PALIERS.filter((z) => z <= zoomMax.current).map((z) => (
+              <button key={z} className={Math.abs(zoom - z) < 0.05 ? "on" : ""} onClick={() => choisirZoom(z)}>{z}×</button>
+            ))}
+            {!PALIERS.some((z) => Math.abs(zoom - z) < 0.05) && <span>{zoom.toFixed(1).replace(".", ",")}×</span>}
+          </div>
 
           <div className="bas">
             <div className="cote gauche">
