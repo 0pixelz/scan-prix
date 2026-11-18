@@ -13,7 +13,7 @@ import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
   IAssistant, ICamera, IComparer, ICrayon, IEtiquette, IExport, IListe, IMagasin, IPhotos, IPlus, IRecherche,
-  argent, aujourdhui, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
+  PastilleBanniere, argent, aujourdhui, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
 type Onglet = "scan" | "liste" | "comparer" | "assistant" | "visites";
@@ -228,7 +228,8 @@ function App({ refuse }: { refuse: () => void }) {
           {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
 
           <div className="card visite">
-            <div className="ic soft"><IMagasin /></div>
+            {visite && <PastilleBanniere banniere={visite.banniere} doux />}
+            {!visite && <div className="ic soft"><IMagasin /></div>}
             <div className="grow">
               <div className="muted">Visite en cours</div>
               {visites.length ? (
@@ -364,7 +365,7 @@ function App({ refuse }: { refuse: () => void }) {
             {!visites.length && <div className="empty"><IMagasin /><div>Aucune visite.</div></div>}
             {visites.map((v) => (
               <div key={v.id} className="tx" role="button" onClick={() => { setVisite(v); setOnglet("scan"); }}>
-                <div className={`ic ${v.id === visite?.id ? "" : "soft"}`}>{v.banniere.charAt(0).toUpperCase()}</div>
+                <PastilleBanniere banniere={v.banniere} doux={v.id !== visite?.id} />
                 <div className="mid">
                   <div className="t">{v.banniere}{v.magasin ? ` · ${v.magasin}` : ""}</div>
                   <div className="s">{dateLisible(v.date_visite)}{v.id === visite?.id ? " · en cours" : ""}</div>

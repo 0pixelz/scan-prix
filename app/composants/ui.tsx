@@ -3,6 +3,21 @@ import type { ScanAvecVisite } from "@/lib/types";
 
 export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C"];
 
+const LOGOS = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro"];
+
+/** Adresse du logo d'une bannière (fichiers fournis dans public/bannieres), ou null si on n'en a pas. */
+export function logoBanniere(banniere: string | null | undefined): string | null {
+  const cle = (banniere ?? "").toLowerCase().normalize("NFD").replace(/[^a-z]/g, "");
+  return LOGOS.includes(cle) ? `/bannieres/${cle}.webp` : null;
+}
+
+/** Pastille d'une bannière : son logo s'il est connu, sinon son initiale. */
+export function PastilleBanniere({ banniere, doux }: { banniere: string | null | undefined; doux?: boolean }) {
+  const logo = logoBanniere(banniere);
+  if (logo) return <div className="ic logo"><img src={logo} alt="" /></div>;
+  return <div className={`ic ${doux ? "soft" : ""}`}>{(banniere || "?").trim().charAt(0).toUpperCase()}</div>;
+}
+
 export const argent = (v: number | null) =>
   v === null ? "—" : Number(v).toLocaleString("fr-CA", { style: "currency", currency: "CAD" });
 

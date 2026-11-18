@@ -349,3 +349,8 @@ label.case input { width: 22px; height: 22px; min-height: 0; padding: 0; flex: n
 
 .visite { gap: 8px; }
 .visite button.icone { color: var(--accent); }
+
+/* Logos des bannières */
+.ic.logo { background: #fff; padding: 4px; overflow: hidden; }
+.ic.logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.tuiles button img.logo { width: 100%; max-width: 76px; height: 34px; object-fit: contain; background: #fff; border-radius: 8px; padding: 3px 5px; }

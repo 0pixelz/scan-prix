@@ -46,3 +46,8 @@ npm run dev
 Deux relevés sont considérés comme le même produit s'ils ont le même CUP, ou la même clé normalisée
 (marque, nom et format, sans accents ni ordre des mots). Pour une offre « 2 pour 5,00 $ », le prix comparé
 est le prix à l'unité (2,50 $).
+
+## Logos des bannières
+
+Les logos de `public/bannieres/` sont des marques de commerce de leurs propriétaires respectifs. Ils servent
+uniquement à reconnaître les magasins dans cette app à usage personnel.

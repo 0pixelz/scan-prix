@@ -6,7 +6,7 @@ import { prixEffectif, type Groupe } from "@/lib/comparaison";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Scan, type Visite } from "@/lib/types";
 import Visionneuse from "./Visionneuse";
-import { BANNIERES, ICodeBarres, argent, aujourdhui, dateLisible } from "./ui";
+import { BANNIERES, ICodeBarres, PastilleBanniere, argent, aujourdhui, dateLisible, logoBanniere } from "./ui";
 
 /** Création d'une visite, ou modification d'une visite existante (bannière, magasin, date). */
 export function NouvelleVisite({ visite, fermer, creee, supprimee }: {
@@ -49,7 +49,11 @@ export function NouvelleVisite({ visite, fermer, creee, supprimee }: {
         <div className="tuiles">
           {BANNIERES.map((b, i) => (
             <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { setAutre(false); setBanniere(b); }}>
-              <span style={{ "--h": (i * 47 + 172) % 360 } as React.CSSProperties}>{b.charAt(0)}</span>
+              {logoBanniere(b) ? (
+                <img className="logo" src={logoBanniere(b)!} alt="" />
+              ) : (
+                <span style={{ "--h": (i * 47 + 172) % 360 } as React.CSSProperties}>{b.charAt(0)}</span>
+              )}
               {b}
             </button>
           ))}
@@ -289,7 +293,7 @@ export function Historique({ groupe, fermer }: { groupe: Groupe; fermer: () => v
             const delta = prix !== null && prixAvant !== null ? prix - prixAvant : 0;
             return (
               <div key={o.id} className="tx" style={{ cursor: "default" }}>
-                <div className="ic soft">{(o.visites?.banniere || "?").charAt(0).toUpperCase()}</div>
+                <PastilleBanniere banniere={o.visites?.banniere} doux />
                 <div className="mid">
                   <div className="t">{o.visites?.banniere ?? "Visite inconnue"}{o.visites?.magasin ? ` · ${o.visites.magasin}` : ""}</div>
                   <div className="s">{o.visites ? dateLisible(o.visites.date_visite) : ""}</div>
