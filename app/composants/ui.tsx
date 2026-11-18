@@ -87,4 +87,5 @@ export const IExport = () => <Icone d={["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "
 export const IRecherche = () => <Icone d={["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "M20 20l-3.8-3.8"]} />;
 export const ICodeBarres = () => <Icone d={["M4 6v12", "M7.5 6v12", "M10.5 6v12", "M14 6v12", "M17 6v12", "M20 6v12"]} />;
 export const ICoche = () => <Icone d={["M5 12.5l4.5 4.5L19 7.5"]} />;
+export const ICrayon = () => <Icone d={["M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5 4 20z", "M14.5 6l3 3"]} />;
 export const IEffacer = () => <Icone d={["M5 7h14", "M9 7V4.5h6V7", "M7 7l1 12.5h8L17 7"]} />;

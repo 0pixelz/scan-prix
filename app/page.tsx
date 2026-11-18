@@ -12,7 +12,7 @@ import Liste from "./composants/Liste";
 import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
-  IAssistant, ICamera, IComparer, IEtiquette, IExport, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  IAssistant, ICamera, IComparer, ICrayon, IEtiquette, IExport, IListe, IMagasin, IPhotos, IPlus, IRecherche,
   argent, aujourdhui, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
@@ -58,6 +58,7 @@ function App({ refuse }: { refuse: () => void }) {
   const [historique, setHistorique] = useState<Groupe | null>(null);
   const [nouvelle, setNouvelle] = useState(false);
   const [rafale, setRafale] = useState(false);
+  const [modifVisite, setModifVisite] = useState<Visite | null>(null);
   const [exportEnCours, setExportEnCours] = useState(false);
   const [recherche, setRecherche] = useState("");
   const [filtre, setFiltre] = useState<Filtre>("tous");
@@ -242,7 +243,8 @@ function App({ refuse }: { refuse: () => void }) {
                 <b>Aucune visite</b>
               )}
             </div>
-            <button className="ghost" onClick={() => setNouvelle(true)}>Nouvelle</button>
+            {visite && <button className="ghost icone" aria-label="Modifier la visite" onClick={() => setModifVisite(visite)}><ICrayon /></button>}
+            <button className="ghost icone" aria-label="Nouvelle visite" onClick={() => setNouvelle(true)}><IPlus /></button>
           </div>
 
           {visite && (
@@ -367,6 +369,7 @@ function App({ refuse }: { refuse: () => void }) {
                   <div className="t">{v.banniere}{v.magasin ? ` · ${v.magasin}` : ""}</div>
                   <div className="s">{dateLisible(v.date_visite)}{v.id === visite?.id ? " · en cours" : ""}</div>
                 </div>
+                <button className="ghost icone" aria-label={`Modifier la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); setModifVisite(v); }}><ICrayon /></button>
                 <button className="small" disabled={exportEnCours} onClick={(e) => { e.stopPropagation(); exporter(v); }}>
                   <IExport /> Excel
                 </button>
@@ -406,6 +409,27 @@ function App({ refuse }: { refuse: () => void }) {
         <NouvelleVisite
           fermer={visites.length ? () => setNouvelle(false) : undefined}
           creee={(v) => { setVisites((l) => [v, ...l]); setVisite(v); setNouvelle(false); setOnglet("scan"); }}
+        />
+      )}
+
+      {modifVisite && (
+        <NouvelleVisite
+          visite={modifVisite}
+          fermer={() => setModifVisite(null)}
+          creee={(v) => {
+            setVisites((l) => l.map((x) => (x.id === v.id ? v : x)));
+            if (visite?.id === v.id) setVisite(v);
+            setModifVisite(null);
+          }}
+          supprimee={(id) => {
+            const reste = visites.filter((x) => x.id !== id);
+            setVisites(reste);
+            if (visite?.id === id) {
+              setVisite(reste[0] ?? null);
+              if (!reste.length) setNouvelle(true);
+            }
+            setModifVisite(null);
+          }}
         />
       )}
 

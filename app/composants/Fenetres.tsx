@@ -8,29 +8,43 @@ import { CATEGORIES, type Scan, type Visite } from "@/lib/types";
 import Visionneuse from "./Visionneuse";
 import { BANNIERES, ICodeBarres, argent, aujourdhui, dateLisible } from "./ui";
 
-export function NouvelleVisite({ fermer, creee }: { fermer?: () => void; creee: (v: Visite) => void }) {
-  const [banniere, setBanniere] = useState("");
-  const [autre, setAutre] = useState(false);
-  const [magasin, setMagasin] = useState("");
-  const [date, setDate] = useState(aujourdhui());
+/** Création d'une visite, ou modification d'une visite existante (bannière, magasin, date). */
+export function NouvelleVisite({ visite, fermer, creee, supprimee }: {
+  visite?: Visite;
+  fermer?: () => void;
+  creee: (v: Visite) => void;
+  supprimee?: (id: string) => void;
+}) {
+  const [banniere, setBanniere] = useState(visite?.banniere ?? "");
+  const [autre, setAutre] = useState(Boolean(visite && !BANNIERES.includes(visite.banniere)));
+  const [magasin, setMagasin] = useState(visite?.magasin ?? "");
+  const [date, setDate] = useState(visite?.date_visite ?? aujourdhui());
   const [erreur, setErreur] = useState("");
+  const [confirmer, setConfirmer] = useState(false);
 
-  async function creer(e: React.FormEvent) {
+  async function enregistrer(e: React.FormEvent) {
     e.preventDefault();
-    const { data, error } = await supabaseBrowser()
-      .from("visites")
-      .insert({ banniere: banniere.trim(), magasin: magasin.trim() || null, date_visite: date })
-      .select()
-      .single();
+    const valeurs = { banniere: banniere.trim(), magasin: magasin.trim() || null, date_visite: date };
+    const table = supabaseBrowser().from("visites");
+    const { data, error } = visite
+      ? await table.update(valeurs).eq("id", visite.id).select().single()
+      : await table.insert(valeurs).select().single();
     if (error) setErreur(error.message);
     else creee(data as Visite);
   }
 
+  async function supprimer() {
+    if (!visite) return;
+    const { error } = await supabaseBrowser().from("visites").delete().eq("id", visite.id);
+    if (error) setErreur(error.message);
+    else supprimee?.(visite.id);
+  }
+
   return (
     <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer?.()}>
-      <form className="panel" onSubmit={creer}>
+      <form className="panel" onSubmit={enregistrer}>
         <div className="grip" />
-        <h3>Nouvelle visite</h3>
+        <h3>{visite ? "Modifier la visite" : "Nouvelle visite"}</h3>
         <label>Bannière</label>
         <div className="tuiles">
           {BANNIERES.map((b, i) => (
@@ -44,15 +58,23 @@ export function NouvelleVisite({ fermer, creee }: { fermer?: () => void; creee: 
             Autre
           </button>
         </div>
-        {autre && <input style={{ marginTop: 10 }} value={banniere} onChange={(e) => setBanniere(e.target.value)} placeholder="Nom de la bannière" autoFocus />}
+        {autre && <input style={{ marginTop: 10 }} value={banniere} onChange={(e) => setBanniere(e.target.value)} placeholder="Nom de la bannière" autoFocus={!visite} />}
         <label>Magasin (ville, succursale)</label>
         <input value={magasin} onChange={(e) => setMagasin(e.target.value)} placeholder="Ex. Mirabel" />
         <label>Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
         <div className="actions">
-          <button className="primary full" disabled={!banniere.trim()}>Commencer</button>
+          <button className="primary full" disabled={!banniere.trim()}>{visite ? "Enregistrer" : "Commencer"}</button>
           {fermer && <button type="button" className="full" onClick={fermer}>Annuler</button>}
+          {visite && (
+            <>
+              <button type="button" className="danger full" onClick={confirmer ? supprimer : () => setConfirmer(true)}>
+                {confirmer ? "Confirmer : supprimer la visite et tous ses prix" : "Supprimer la visite"}
+              </button>
+              {confirmer && <div className="muted" style={{ textAlign: "center" }}>Cette suppression est définitive.</div>}
+            </>
+          )}
         </div>
       </form>
     </div>
