@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase";
 import { prixEffectif, type Groupe } from "@/lib/comparaison";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Scan, type Visite } from "@/lib/types";
+import Visionneuse from "./Visionneuse";
 import { BANNIERES, ICodeBarres, argent, aujourdhui, dateLisible } from "./ui";
 
 export function NouvelleVisite({ fermer, creee }: { fermer?: () => void; creee: (v: Visite) => void }) {
@@ -129,6 +130,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
   const [erreur, setErreur] = useState("");
   const [confirmer, setConfirmer] = useState(false);
   const [lecteur, setLecteur] = useState(false);
+  const [agrandie, setAgrandie] = useState(false);
 
   useEffect(() => {
     if (!scan.photo_path) return;
@@ -172,6 +174,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
   }
 
   if (lecteur) return <ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setF((v) => ({ ...v, cup: code })); setLecteur(false); }} />;
+  if (agrandie && photo) return <Visionneuse src={photo} fermer={() => setAgrandie(false)} />;
 
   return (
     <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer()}>
@@ -223,7 +226,12 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
         </div>
         {champ("code_article", "Code article")}
         {champ("notes", "Notes")}
-        {photo && <img className="photo" src={photo} alt="Photo de la carte de prix" />}
+        {photo && (
+          <button type="button" className="photo" onClick={() => setAgrandie(true)} aria-label="Agrandir la photo">
+            <img src={photo} alt="Photo de la carte de prix" />
+            <span>Toucher pour agrandir</span>
+          </button>
+        )}
         {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
         <div className="actions">
           <button className="primary full">Enregistrer</button>
