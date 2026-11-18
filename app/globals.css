@@ -418,3 +418,9 @@ label.bouton input { display: none; }
 .resume b { font-size: 14.5px; font-variant-numeric: tabular-nums; }
 .resume em { font-style: normal; font-size: 12.5px; }
 .panel.revision .photo img { max-height: 34dvh; object-fit: contain; background: #000; }
+
+/* Choix de produits déjà scannés */
+.panel.selection { display: flex; flex-direction: column; max-height: 92dvh; overflow: hidden; }
+.panel.selection .defile { flex: 1; min-height: 120px; overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 4px -4px 0; padding: 0 4px; }
+.panel.selection .actions { flex: none; margin-top: 10px; }
+.panel.selection .ghost { align-self: flex-start; }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
-import { correspond } from "@/lib/comparaison";
+import { correspond, grouper, normaliser, type Groupe } from "@/lib/comparaison";
 import type { ProduitListe, Scan, Visite } from "@/lib/types";
 import { ScannerCode } from "./Fenetres";
-import { ICoche, ICodeBarres, IFermer, IListe, IPlus } from "./ui";
+import IconeProduit from "./IconeProduit";
+import { ICoche, ICodeBarres, IFermer, IListe, IPlus, IRecherche, chargerTout } from "./ui";
 
 /** Liste des produits à relever : coche automatique quand le produit est scanné dans la visite en cours. */
 export default function Liste({ liste, scans, visite, recharger }: {
@@ -19,6 +20,7 @@ export default function Liste({ liste, scans, visite, recharger }: {
   const [cup, setCup] = useState("");
   const [lecteur, setLecteur] = useState(false);
   const [erreur, setErreur] = useState("");
+  const [choix, setChoix] = useState(false);
 
   const releves = new Set(liste.filter((p) => scans.some((s) => correspond(p, s))).map((p) => p.id));
   const tries = [...liste].sort((a, b) => Number(releves.has(a.id)) - Number(releves.has(b.id)));
@@ -39,7 +41,8 @@ export default function Liste({ liste, scans, visite, recharger }: {
     else recharger();
   }
 
-  if (lecteur) return <ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setCup(code); setLecteur(false); }} />;
+  if (choix) return <><main /><ChoixProduits liste={liste} fermer={() => setChoix(false)} ajoutes={() => { setChoix(false); recharger(); }} /></>;
+  if (lecteur) return <><main /><ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setCup(code); setLecteur(false); }} /></>;
 
   return (
     <main>
@@ -53,6 +56,9 @@ export default function Liste({ liste, scans, visite, recharger }: {
           <button type="button" aria-label="Scanner le code-barres" onClick={() => setLecteur(true)}><ICodeBarres /></button>
           <button className="primary" disabled={!nom.trim()}><IPlus /> Ajouter</button>
         </div>
+        <button type="button" className="full" style={{ marginTop: 10 }} onClick={() => setChoix(true)}>
+          <IListe /> Choisir parmi mes produits déjà scannés
+        </button>
       </form>
 
       <div className="card">
@@ -80,5 +86,112 @@ export default function Liste({ liste, scans, visite, recharger }: {
         ))}
       </div>
     </main>
+  );
+}
+
+/** Nom d'un produit pour la liste : marque, nom et format, sans répéter ce que le nom contient déjà. */
+function nomPourListe(g: Groupe): string {
+  const nom = g.nom.trim();
+  const contient = (morceau: string | null) => !morceau || normaliser(nom).includes(normaliser(morceau));
+  return [contient(g.marque) ? null : g.marque, nom, contient(g.format) ? null : g.format].filter(Boolean).join(" ");
+}
+
+/** Choix de produits déjà scannés à ajouter à la liste, plusieurs à la fois. */
+function ChoixProduits({ liste, fermer, ajoutes }: { liste: ProduitListe[]; fermer: () => void; ajoutes: () => void }) {
+  const sb = supabaseBrowser();
+  const [groupes, setGroupes] = useState<Groupe[] | null>(null);
+  const [coches, setCoches] = useState<Set<string>>(new Set());
+  const [recherche, setRecherche] = useState("");
+  const [erreur, setErreur] = useState("");
+  const [envoi, setEnvoi] = useState(false);
+
+  useEffect(() => {
+    chargerTout(sb)
+      .then((tout) => setGroupes(grouper(tout).filter((g) => g.nom !== "Produit non lu").sort((a, b) => a.nom.localeCompare(b.nom, "fr"))))
+      .catch((e) => setErreur(e instanceof Error ? e.message : "Erreur inconnue"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Produits pas encore dans la liste
+  const disponibles = (groupes ?? []).filter((g) => !liste.some((p) => g.observations.some((o) => correspond(p, o))));
+  const mots = normaliser(recherche).split(" ").filter(Boolean);
+  const visibles = disponibles.filter((g) => {
+    if (!mots.length) return true;
+    const texte = normaliser([g.nom, g.marque, g.format, g.cup, g.categorie].filter(Boolean).join(" "));
+    return mots.every((m) => texte.includes(m));
+  });
+  const tousCoches = visibles.length > 0 && visibles.every((g) => coches.has(g.id));
+
+  function basculer(id: string) {
+    setCoches((c) => {
+      const n = new Set(c);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+
+  function toutBasculer() {
+    setCoches((c) => {
+      const n = new Set(c);
+      visibles.forEach((g) => (tousCoches ? n.delete(g.id) : n.add(g.id)));
+      return n;
+    });
+  }
+
+  async function ajouter() {
+    const lignes = disponibles.filter((g) => coches.has(g.id)).map((g) => ({ nom: nomPourListe(g), cup: g.cup?.replace(/\D/g, "") || null }));
+    if (!lignes.length) return;
+    setEnvoi(true);
+    const { error } = await sb.from("liste_produits").insert(lignes);
+    setEnvoi(false);
+    if (error) setErreur(error.message);
+    else ajoutes();
+  }
+
+  return (
+    <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer()}>
+      <div className="panel selection">
+        <div className="grip" />
+        <div className="row between">
+          <h3>Produits déjà scannés</h3>
+          <button type="button" className="ghost" onClick={fermer}>Fermer</button>
+        </div>
+        <div className="search" style={{ marginTop: 12, background: "var(--bg)", boxShadow: "none" }}>
+          <IRecherche />
+          <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher un produit, une marque" />
+        </div>
+        {erreur && <div className="alert">{erreur}</div>}
+        {groupes === null && !erreur && <p className="muted">Chargement…</p>}
+        {groupes !== null && !disponibles.length && (
+          <div className="empty">
+            <IListe />
+            <div>{groupes.length ? "Tous tes produits scannés sont déjà dans la liste." : "Aucun produit scanné pour l'instant."}</div>
+          </div>
+        )}
+        {visibles.length > 0 && (
+          <button type="button" className="ghost" onClick={toutBasculer}>
+            {tousCoches ? "Tout désélectionner" : `Tout sélectionner (${visibles.length})`}
+          </button>
+        )}
+        <div className="defile">
+          {disponibles.length > 0 && !visibles.length && <div className="empty"><div>Aucun produit trouvé.</div></div>}
+          {visibles.map((g) => (
+            <div key={g.id} className="tx" role="checkbox" aria-checked={coches.has(g.id)} onClick={() => basculer(g.id)}>
+              <div className={`coche ${coches.has(g.id) ? "on" : ""}`}>{coches.has(g.id) && <ICoche />}</div>
+              <IconeProduit icone={g.icone} categorie={g.categorie} />
+              <div className="mid">
+                <div className="t">{g.nom}</div>
+                <div className="s">{[g.marque, g.format, g.cup ? `CUP ${g.cup}` : null].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="actions">
+          <button className="primary full" disabled={!coches.size || envoi} onClick={ajouter}>
+            {coches.size ? `Ajouter ${coches.size} produit${coches.size > 1 ? "s" : ""} à la liste` : "Sélectionne des produits"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
