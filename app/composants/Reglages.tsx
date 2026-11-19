@@ -180,9 +180,12 @@ export default function Reglages({ reglages, enregistrer, acces, rechargerAcces,
                 <label>Poste ou équipe</label>
                 <input value={f.poste} disabled={lecture} onChange={(e) => setF({ ...f, poste: e.target.value })} placeholder="Ex. Chef gestion des prix, Équipe pricing" maxLength={60} />
                 <label className="case"><input type="checkbox" checked={f.lieu} disabled={lecture} onChange={(e) => setF({ ...f, lieu: e.target.checked })} />Ajouter le lieu (bannière et magasin de la visite)</label>
+                <label>Transparence : {100 - f.opacite} %</label>
+                <input type="range" className="curseur" min={0} max={80} step={5} value={100 - f.opacite} disabled={lecture} aria-label="Transparence de la signature"
+                  onChange={(e) => setF({ ...f, opacite: 100 - Number(e.target.value) })} />
                 <label>Aperçu</label>
                 <div className="apercufili">
-                  <div>
+                  <div style={{ opacity: f.opacite / 100 }}>
                     {f.logo && <img src="/marque/metro.webp" alt="Logo" />}
                     {apercu.map((l, i) => <span key={i} className={i === 0 && f.nom.trim() ? "nom" : ""}>{l}</span>)}
                   </div>

@@ -451,8 +451,9 @@ label.bouton input { display: none; }
 .panel.reglages .bloc .tableau { margin-top: 6px; }
 .panel.reglages .bloc .tableau > div { grid-template-columns: 1.6fr 0.7fr 1fr; }
 .panel.reglages .tx button.small { flex: none; }
-.apercufili { height: 170px; border-radius: 12px; background: linear-gradient(135deg, #94a3b8, #475569); position: relative; overflow: hidden; }
-.apercufili > div { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.9); color: #111827; font-size: 11.5px; font-weight: 500; }
+.apercufili { height: 170px; border-radius: 12px; background: repeating-linear-gradient(45deg, rgba(255,255,255,0.14) 0 10px, transparent 10px 20px), linear-gradient(135deg, #94a3b8, #334155); position: relative; overflow: hidden; }
+input.curseur { width: 100%; padding: 0; border: 0; background: none; accent-color: var(--accent); height: 32px; }
+.apercufili > div { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 6px; background: #fff; color: #111827; font-size: 11.5px; font-weight: 500; }
 .apercufili img { height: 20px; width: auto; align-self: flex-start; margin-bottom: 4px; }
 .apercufili .nom { font-weight: 700; }
 .annuler { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(150px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--text); color: var(--bg); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); font-size: 14px; white-space: nowrap; }

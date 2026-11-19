@@ -52,7 +52,8 @@ export async function filigraner(file: File, f: Filigrane, quand: string, lieu: 
     const x = marge;
     const y = canvas.height - marge - hauteur - 2 * pad;
 
-    c.fillStyle = "rgba(255, 255, 255, 0.9)";
+    c.globalAlpha = Math.min(100, Math.max(20, f.opacite ?? 90)) / 100; // transparence de toute la signature
+    c.fillStyle = "#ffffff";
     c.beginPath();
     c.roundRect(x, y, largeur + 2 * pad, hauteur + 2 * pad, Math.round(t * 0.5));
     c.fill();
@@ -68,6 +69,7 @@ export async function filigraner(file: File, f: Filigrane, quand: string, lieu: 
       c.fillText(l, x + pad, yy + Math.round((interligne - t) / 2), largeur);
       yy += interligne;
     });
+    c.globalAlpha = 1;
     return canvas.toDataURL("image/jpeg", 0.82);
   } finally {
     URL.revokeObjectURL(url);

@@ -49,7 +49,7 @@ export type ProduitListe = { id: string; nom: string; cup: string | null; liste_
 export type ListeNom = { id: string; nom: string; created_at: string };
 
 /** Signature ajoutée au bas des photos gardées (jamais sur l'image envoyée en lecture). */
-export type Filigrane = { actif: boolean; logo: boolean; nom: string; poste: string; lieu: boolean };
+export type Filigrane = { actif: boolean; logo: boolean; nom: string; poste: string; lieu: boolean; opacite: number }; // opacité en %, de 20 à 100
 
 /** Tarifs Claude en dollars US par million de jetons, pour estimer le coût. */
 export type Tarifs = { sonnetEntree: number; sonnetSortie: number; haikuEntree: number; haikuSortie: number };
@@ -57,7 +57,7 @@ export type Tarifs = { sonnetEntree: number; sonnetSortie: number; haikuEntree: 
 export type Reglages = { filigrane: Filigrane; seuil: number; tarifs: Tarifs };
 
 export const REGLAGES_DEFAUT: Reglages = {
-  filigrane: { actif: false, logo: true, nom: "", poste: "", lieu: false },
+  filigrane: { actif: false, logo: true, nom: "", poste: "", lieu: false, opacite: 90 },
   seuil: 5,
   tarifs: { sonnetEntree: 2, sonnetSortie: 10, haikuEntree: 0.1, haikuSortie: 0.5 },
 };
@@ -66,8 +66,11 @@ export const REGLAGES_DEFAUT: Reglages = {
 export function lireReglages(donnees: unknown): Reglages {
   const d = (donnees && typeof donnees === "object" ? donnees : {}) as Partial<Reglages>;
   const seuil = Number(d.seuil);
+  const filigrane = { ...REGLAGES_DEFAUT.filigrane, ...(d.filigrane ?? {}) };
+  const opacite = Number(filigrane.opacite);
+  filigrane.opacite = Number.isFinite(opacite) ? Math.min(100, Math.max(20, Math.round(opacite))) : 90;
   return {
-    filigrane: { ...REGLAGES_DEFAUT.filigrane, ...(d.filigrane ?? {}) },
+    filigrane,
     seuil: Number.isFinite(seuil) && seuil > 0 ? seuil : REGLAGES_DEFAUT.seuil,
     tarifs: { ...REGLAGES_DEFAUT.tarifs, ...(d.tarifs ?? {}) },
   };
