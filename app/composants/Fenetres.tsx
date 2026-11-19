@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
-import { cupNormalise, distanceMetres, prixEffectif, type Groupe } from "@/lib/comparaison";
+import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
+import Graphique from "./Graphique";
+import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
-import { BANNIERES, ICodeBarres, IPosition, PastilleBanniere, argent, aujourdhui, chargerReferences, dateLisible, logoBanniere } from "./ui";
+import { BANNIERES, ICodeBarres, IPosition, IRecherche, PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, logoBanniere } from "./ui";
 
 /** Création d'une visite, ou modification d'une visite existante (bannière, magasin, date). */
 export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
@@ -74,8 +76,9 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
 
   async function supprimer() {
     if (!visite) return;
-    const { error } = await supabaseBrowser().from("visites").delete().eq("id", visite.id);
+    const { data, error } = await supabaseBrowser().from("visites").delete().eq("id", visite.id).select("id");
     if (error) setErreur(error.message);
+    else if (!data?.length) setErreur("Accès en lecture seule : suppression refusée.");
     else supprimee?.(visite.id);
   }
 
@@ -127,7 +130,7 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
               <button type="button" className="danger full" onClick={confirmer ? supprimer : () => setConfirmer(true)}>
                 {confirmer ? "Confirmer : supprimer la visite et tous ses prix" : "Supprimer la visite"}
               </button>
-              {confirmer && <div className="muted" style={{ textAlign: "center" }}>Cette suppression est définitive.</div>}
+              {confirmer && <div className="muted" style={{ textAlign: "center" }}>La visite ira dans la corbeille : tu peux la récupérer pendant 30 jours (Réglages).</div>}
             </>
           )}
         </div>
@@ -191,8 +194,9 @@ export function ScannerCode({ fermer, lu }: { fermer: () => void; lu: (code: str
 
 const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "points", "points_details", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
 
-export function Edition({ scan, fermer, enregistre, supprime, historique }: {
+export function Edition({ scan, fermer, enregistre, supprime, historique, lecture }: {
   scan: Scan;
+  lecture?: boolean;
   fermer: () => void;
   enregistre: (s: Scan) => void;
   supprime: (id: string) => void;
@@ -247,13 +251,14 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
       confiance: "haute", // vérifié à la main
     };
     const { data, error } = await sb.from("scans").update(maj).eq("id", scan.id).select().single();
-    if (error) setErreur(error.message);
+    if (error) setErreur(/row-level|0 rows|PGRST116/i.test(error.message + error.code) ? "Accès en lecture seule : modification refusée." : error.message);
     else enregistre(data as Scan);
   }
 
   async function effacer() {
-    const { error } = await sb.from("scans").delete().eq("id", scan.id);
+    const { data, error } = await sb.from("scans").delete().eq("id", scan.id).select("id");
     if (error) return setErreur(error.message);
+    if (!data?.length) return setErreur("Accès en lecture seule : suppression refusée.");
     supprime(scan.id);
   }
 
@@ -332,20 +337,105 @@ export function Edition({ scan, fermer, enregistre, supprime, historique }: {
         )}
         {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
         <div className="actions">
-          <button className="primary full">Enregistrer</button>
+          {!lecture && <button className="primary full">Enregistrer</button>}
           <button type="button" className="full" onClick={() => historique(scan)}>Voir l'historique du produit</button>
-          <button type="button" className="danger full" onClick={confirmer ? effacer : () => setConfirmer(true)}>
-            {confirmer ? "Confirmer la suppression" : "Supprimer"}
-          </button>
+          {!lecture && (
+            <button type="button" className="danger full" onClick={confirmer ? effacer : () => setConfirmer(true)}>
+              {confirmer ? "Confirmer la suppression" : "Supprimer"}
+            </button>
+          )}
         </div>
       </form>
     </div>
   );
 }
 
-/** Tous les prix relevés pour un même produit, du plus récent au plus ancien. */
-export function Historique({ groupe, fermer }: { groupe: Groupe; fermer: () => void }) {
+/** Tous les prix relevés pour un même produit : graphique d'évolution, relevés, et association à un autre produit. */
+export function Historique({ groupe: initial, fermer, modifie, lecture }: { groupe: Groupe; fermer: () => void; modifie?: () => void; lecture?: boolean }) {
+  const sb = supabaseBrowser();
+  const [groupe, setGroupe] = useState(initial);
+  const [autres, setAutres] = useState<Groupe[] | null>(null); // autres produits, pour l'association
+  const [recherche, setRecherche] = useState("");
+  const [erreur, setErreur] = useState("");
+  const [occupe, setOccupe] = useState(false);
   const obs = groupe.observations;
+  const associe = obs.some((o) => o.groupe_manuel);
+  const ici = (g: Groupe) => g.observations.some((o) => o.id === obs[0].id);
+
+  async function ouvrirAssociation() {
+    setErreur("");
+    try {
+      setAutres(grouper(await chargerTout(sb)).filter((g) => !ici(g)).sort((a, b) => a.nom.localeCompare(b.nom, "fr")));
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Erreur inconnue");
+    }
+  }
+
+  /** Écrit la même valeur d'association sur tous les relevés donnés, puis relit le produit. */
+  async function ecrire(ids: string[], valeur: string | null) {
+    setOccupe(true);
+    setErreur("");
+    try {
+      for (let i = 0; i < ids.length; i += 100) {
+        const { data, error } = await sb.from("scans").update({ groupe_manuel: valeur }).in("id", ids.slice(i, i + 100)).select("id");
+        if (error) throw new Error(error.message);
+        if (!data?.length) throw new Error("Accès en lecture seule : modification refusée.");
+      }
+      const suite = grouper(await chargerTout(sb)).find(ici);
+      if (suite) setGroupe(suite);
+      setAutres(null);
+      setRecherche("");
+      modifie?.();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Erreur inconnue");
+    } finally {
+      setOccupe(false);
+    }
+  }
+
+  const associer = (autre: Groupe) => {
+    const tous = [...obs, ...autre.observations];
+    return ecrire(tous.map((o) => o.id), tous.find((o) => o.groupe_manuel)?.groupe_manuel ?? crypto.randomUUID());
+  };
+  const dissocier = () => ecrire(obs.filter((o) => o.groupe_manuel).map((o) => o.id), null);
+
+  if (autres) {
+    const mots = normaliser(recherche).split(" ").filter(Boolean);
+    const visibles = autres.filter((g) => {
+      const texte = normaliser([g.nom, g.marque, g.format, g.cup].filter(Boolean).join(" "));
+      return mots.every((m) => texte.includes(m));
+    });
+    return (
+      <div className="sheet" onClick={(e) => e.target === e.currentTarget && setAutres(null)}>
+        <div className="panel selection">
+          <div className="grip" />
+          <div className="row between">
+            <h3>Associer à un autre produit</h3>
+            <button type="button" className="ghost" onClick={() => setAutres(null)}>Retour</button>
+          </div>
+          <div className="muted">Choisis le produit qui est le même que « {groupe.nom} ». Leurs prix seront comparés ensemble.</div>
+          <div className="search" style={{ marginTop: 12, background: "var(--bg)", boxShadow: "none" }}>
+            <IRecherche />
+            <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher un produit, une marque, un CUP" />
+          </div>
+          {erreur && <div className="alert">{erreur}</div>}
+          <div className="defile">
+            {!visibles.length && <div className="empty"><div>Aucun produit trouvé.</div></div>}
+            {visibles.slice(0, 60).map((g) => (
+              <div key={g.id} className="tx" role="button" onClick={() => !occupe && associer(g)}>
+                <IconeProduit icone={g.icone} categorie={g.categorie} />
+                <div className="mid">
+                  <div className="t">{g.nom}</div>
+                  <div className="s">{[g.marque, g.format, [...new Set(g.observations.map((o) => o.visites?.banniere).filter(Boolean))].join(", ")].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer()}>
       <div className="panel">
@@ -356,6 +446,7 @@ export function Historique({ groupe, fermer }: { groupe: Groupe; fermer: () => v
         </div>
         <div style={{ fontWeight: 600, marginTop: 8 }}>{groupe.nom}</div>
         <div className="muted">{[groupe.marque, groupe.format, groupe.categorie].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+        <Graphique observations={obs} />
         <div style={{ marginTop: 10 }}>
           {obs.map((o, i) => {
             const prix = prixEffectif(o);
@@ -368,7 +459,7 @@ export function Historique({ groupe, fermer }: { groupe: Groupe; fermer: () => v
                 <PastilleBanniere banniere={o.visites?.banniere} doux />
                 <div className="mid">
                   <div className="t">{o.visites?.banniere ?? "Visite inconnue"}{o.visites?.magasin ? ` · ${o.visites.magasin}` : ""}</div>
-                  <div className="s">{o.visites ? dateLisible(o.visites.date_visite) : ""}</div>
+                  <div className="s">{[o.visites ? dateLisible(o.visites.date_visite) : "", o.produit !== groupe.nom ? o.produit : null].filter(Boolean).join(" · ")}</div>
                   {o.prix_promo !== null && <span className="pill promo">Promo</span>}{" "}
                   {Math.abs(delta) >= 0.005 && (
                     <span className={`pill ${delta > 0 ? "hausse" : "baisse"}`}>{delta > 0 ? "Hausse de" : "Baisse de"} {argent(Math.abs(delta))}</span>
@@ -383,6 +474,14 @@ export function Historique({ groupe, fermer }: { groupe: Groupe; fermer: () => v
           })}
         </div>
         {obs.length === 1 && <div className="muted" style={{ marginTop: 8 }}>Un seul relevé pour l'instant. L'historique se construit à chaque nouvelle visite.</div>}
+        {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
+        {!lecture && (
+          <div className="actions">
+            <button type="button" className="full" disabled={occupe} onClick={ouvrirAssociation}>Associer à un autre produit</button>
+            {associe && <button type="button" className="full ghost" disabled={occupe} onClick={dissocier}>Défaire l'association faite à la main</button>}
+            <div className="muted" style={{ textAlign: "center" }}>Utile quand le même produit est écrit différemment d'une bannière à l'autre.</div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -27,8 +27,23 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   - *Référence* : import d'un fichier Excel ou CSV (colonnes CUP et Prix) ; chaque relevé affiche son écart.
 - **Assistant** : discussion avec Claude pour résumer, comparer, corriger, gérer la liste, ou lire une photo.
 - **Prix membre et points** : repérés par Claude, affichés sur chaque prix et dans l'Excel.
-- **Excel** : quatre onglets — Résumé par visite, Comparaison entre bannières, Variations, Prix (données brutes
+- **Excel** : cinq onglets — Résumé par visite, Comparaison entre bannières, Alertes, Variations, Prix (données brutes
   avec prix par unité, source carte ou circulaire, prix de référence et écart).
+
+- **Historique d'un produit** : graphique d'évolution du prix (une ligne par bannière) et liste des relevés.
+  « Associer à un autre produit » regroupe à la main deux produits écrits différemment ; l'association se défait.
+- **Alertes** (onglet Analyse) : écarts égaux ou supérieurs au seuil choisi, par rapport à la liste de référence
+  et entre bannières. Aussi dans l'Excel (onglet Alertes).
+- **Rapport de visite** : PDF d'une page ou plus (résumé, changements de prix, alertes, prix relevés).
+- **Recherche** : la recherche de l'onglet Prix montre aussi les produits des autres visites.
+- **Plusieurs listes** à relever, en plus de la liste principale.
+- **Corbeille** : les prix et les visites supprimés sont récupérables pendant 30 jours ; « Annuler » juste après
+  une suppression.
+- **Réglages** (onglet Visites) :
+  - *Signature des photos* : logo, nom, poste ou équipe, date et heure de la photo, lieu (facultatif), en bas à
+    gauche de la photo gardée. L'image envoyée en lecture reste sans signature. Peut être désactivée.
+  - *Coût Claude* : photos lues, messages et coût estimé du mois, à partir des jetons comptés.
+  - *Accès collègue* : deuxième code à 4 chiffres, en lecture seule ou complet, retirable à tout moment.
 
 ## Installation
 

@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Sans jeton, aucune donnée n'est lisible
         run: |
-          for table in visites scans liste_produits reference_prix; do
+          for table in visites scans liste_produits reference_prix listes corbeille usage_claude reglages; do
             rep=$(curl -sS "$SUPABASE_URL/rest/v1/$table?select=*&limit=1" -H "apikey: $SUPABASE_KEY")
             echo "$table : $rep"
             [ "$rep" = "[]" ] || { echo "::error::La table $table est lisible sans jeton"; exit 1; }

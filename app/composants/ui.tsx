@@ -132,3 +132,6 @@ export const IPosition = () => <Icone d={["M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 
 export const IJournal = () => <Icone d={["M5 4h14v16H5z", "M8.5 8h7", "M8.5 12h7", "M8.5 16h4"]} />;
 export const ICrayon = () => <Icone d={["M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5 4 20z", "M14.5 6l3 3"]} />;
 export const IEffacer = () => <Icone d={["M5 7h14", "M9 7V4.5h6V7", "M7 7l1 12.5h8L17 7"]} />;
+export const IReglages = () => <Icone d={["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", "M9 19.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"]} />;
+export const IAlerte = () => <Icone d={["M12 4l9 15.5H3L12 4z", "M12 10v4.5", "M12 17.2h.01"]} />;
+export const IRestaurer = () => <Icone d={["M4 12a8 8 0 1 0 2.6-5.9", "M4 4.5V9h4.5"]} />;

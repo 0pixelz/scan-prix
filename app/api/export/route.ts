@@ -1,9 +1,9 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
-import { comparer, cupNormalise, grouper, normaliser, prixEffectif, promoUnitaire, variations } from "@/lib/comparaison";
+import { alertes, comparer, cupNormalise, grouper, normaliser, prixEffectif, promoUnitaire, variations } from "@/lib/comparaison";
 import { prixParUnite } from "@/lib/unite";
 import { supabaseServer } from "@/lib/supabase";
-import type { ScanAvecVisite } from "@/lib/types";
+import { lireReglages, type ScanAvecVisite } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -119,6 +119,38 @@ export async function GET(req: Request) {
   });
   if (!comparaison.length) cmp.addRow({ produit: "Aucun produit relevé dans deux bannières pour l'instant." });
   entete(cmp);
+
+  // --- Onglet Alertes : écarts qui dépassent le seuil choisi dans l'app ---
+  const { data: reg } = await supabase.from("reglages").select("donnees").eq("id", 1).maybeSingle();
+  const seuil = lireReglages(reg?.donnees).seuil;
+  const al = wb.addWorksheet("Alertes");
+  al.columns = [
+    { header: "Type", key: "type", width: 18 },
+    { header: "Produit", key: "produit", width: 34 },
+    { header: "Marque", key: "marque", width: 16 },
+    { header: "Format", key: "format", width: 12 },
+    { header: "CUP", key: "cup", width: 16 },
+    { header: "Bannière", key: "banniere", width: 14 },
+    { header: "Date visite", key: "date", width: 12 },
+    { header: "Prix", key: "prix", width: 11, style: { numFmt: DOLLARS } },
+    { header: "Comparé à", key: "baseNom", width: 16 },
+    { header: "Prix comparé", key: "base", width: 13, style: { numFmt: DOLLARS } },
+    { header: "Écart ($)", key: "ecart", width: 11, style: { numFmt: DOLLARS } },
+    { header: "Écart (%)", key: "pct", width: 11, style: { numFmt: "0.0 %" } },
+    { header: "Seuil (%)", key: "seuil", width: 10 },
+  ];
+  const depassements = alertes(comparer(grouper(tout)), (cup) => references.get(cupNormalise(cup)), seuil)
+    .filter((a) => !visiteId || a.obs.visite_id === visiteId);
+  depassements.forEach((a) => {
+    al.addRow({
+      type: a.type === "reference" ? "Référence" : "Entre bannières",
+      produit: a.groupe.nom, marque: a.groupe.marque, format: a.groupe.format, cup: a.groupe.cup,
+      banniere: a.banniere, date: a.obs.visites?.date_visite ?? null,
+      prix: a.prix, baseNom: a.baseNom, base: a.base, ecart: a.prix - a.base, pct: a.pct / 100, seuil,
+    });
+  });
+  if (!depassements.length) al.addRow({ type: `Aucun écart de ${seuil} % ou plus.` });
+  entete(al);
 
   // --- Onglet Variations : dernier prix comparé à la visite précédente dans la même bannière ---
   const vr = wb.addWorksheet("Variations");

@@ -33,6 +33,7 @@ export type Scan = {
   notes: string | null;
   photo_path: string | null;
   photo_prise_le: string | null;
+  groupe_manuel?: string | null; // produits associés à la main : même valeur = même produit
   source: string | null; // « circulaire » pour un prix lu sur une page de circulaire
   created_at: string;
 };
@@ -43,7 +44,36 @@ export type ScanAvecVisite = Scan & {
 
 export type Reference = { cup: string; nom: string | null; prix: number };
 
-export type ProduitListe = { id: string; nom: string; cup: string | null; created_at: string };
+export type ProduitListe = { id: string; nom: string; cup: string | null; liste_id?: string | null; created_at: string };
+
+export type ListeNom = { id: string; nom: string; created_at: string };
+
+/** Signature ajoutée au bas des photos gardées (jamais sur l'image envoyée en lecture). */
+export type Filigrane = { actif: boolean; logo: boolean; nom: string; poste: string; lieu: boolean };
+
+/** Tarifs Claude en dollars US par million de jetons, pour estimer le coût. */
+export type Tarifs = { sonnetEntree: number; sonnetSortie: number; haikuEntree: number; haikuSortie: number };
+
+export type Reglages = { filigrane: Filigrane; seuil: number; tarifs: Tarifs };
+
+export const REGLAGES_DEFAUT: Reglages = {
+  filigrane: { actif: false, logo: true, nom: "", poste: "", lieu: false },
+  seuil: 5,
+  tarifs: { sonnetEntree: 2, sonnetSortie: 10, haikuEntree: 0.1, haikuSortie: 0.5 },
+};
+
+/** Réglages lus dans la base, complétés par les valeurs par défaut. */
+export function lireReglages(donnees: unknown): Reglages {
+  const d = (donnees && typeof donnees === "object" ? donnees : {}) as Partial<Reglages>;
+  const seuil = Number(d.seuil);
+  return {
+    filigrane: { ...REGLAGES_DEFAUT.filigrane, ...(d.filigrane ?? {}) },
+    seuil: Number.isFinite(seuil) && seuil > 0 ? seuil : REGLAGES_DEFAUT.seuil,
+    tarifs: { ...REGLAGES_DEFAUT.tarifs, ...(d.tarifs ?? {}) },
+  };
+}
+
+export type Acces = { role: "complet" | "lecture" | null; proprietaire: boolean; collegue: { role: "complet" | "lecture"; cree_le: string } | null };
 
 export const CATEGORIES = [
   "Fruits et légumes",

@@ -3,13 +3,18 @@
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { correspond, grouper, normaliser, type Groupe } from "@/lib/comparaison";
-import type { ProduitListe, Scan, Visite } from "@/lib/types";
+import type { ListeNom, ProduitListe, Scan, Visite } from "@/lib/types";
 import { ScannerCode } from "./Fenetres";
 import IconeProduit from "./IconeProduit";
 import { ICoche, ICodeBarres, IFermer, IListe, IPlus, IRecherche, chargerTout } from "./ui";
 
 /** Liste des produits à relever : coche automatique quand le produit est scanné dans la visite en cours. */
-export default function Liste({ liste, scans, visite, recharger }: {
+export default function Liste({ liste, scans, visite, recharger, listes, listeId, choisir, rechargerListes, lecture }: {
+  listes: ListeNom[];
+  listeId: string | null; // null = liste principale
+  choisir: (id: string | null) => void;
+  rechargerListes: () => Promise<void> | void;
+  lecture: boolean;
   liste: ProduitListe[];
   scans: Scan[];
   visite: Visite | null;
@@ -21,6 +26,38 @@ export default function Liste({ liste, scans, visite, recharger }: {
   const [lecteur, setLecteur] = useState(false);
   const [erreur, setErreur] = useState("");
   const [choix, setChoix] = useState(false);
+  const [nomListe, setNomListe] = useState<string | null>(null); // saisie d'un nom : nouvelle liste ou renommage
+  const [renommer, setRenommer] = useState(false);
+  const [confirmer, setConfirmer] = useState(false);
+  const courante = listes.find((l) => l.id === listeId) ?? null;
+  useEffect(() => { setNomListe(null); setRenommer(false); setConfirmer(false); }, [listeId]);
+
+  async function enregistrerListe(e: React.FormEvent) {
+    e.preventDefault();
+    const n = (nomListe ?? "").trim();
+    if (!n) return;
+    if (renommer && courante) {
+      const { error } = await sb.from("listes").update({ nom: n }).eq("id", courante.id);
+      if (error) return setErreur(error.message);
+      await rechargerListes();
+    } else {
+      const { data, error } = await sb.from("listes").insert({ nom: n }).select().single();
+      if (error) return setErreur(error.message);
+      await rechargerListes();
+      choisir((data as ListeNom).id);
+    }
+    setNomListe(null);
+    setRenommer(false);
+  }
+
+  async function supprimerListe() {
+    if (!courante) return;
+    const { data, error } = await sb.from("listes").delete().eq("id", courante.id).select("id");
+    if (error) return setErreur(error.message);
+    if (!data?.length) return setErreur("Accès en lecture seule : suppression refusée.");
+    choisir(null);
+    await rechargerListes();
+  }
 
   const releves = new Set(liste.filter((p) => scans.some((s) => correspond(p, s))).map((p) => p.id));
   const tries = [...liste].sort((a, b) => Number(releves.has(a.id)) - Number(releves.has(b.id)));
@@ -28,7 +65,7 @@ export default function Liste({ liste, scans, visite, recharger }: {
   async function ajouter(e: React.FormEvent) {
     e.preventDefault();
     if (!nom.trim()) return;
-    const { error } = await sb.from("liste_produits").insert({ nom: nom.trim(), cup: cup.replace(/\D/g, "") || null });
+    const { error } = await sb.from("liste_produits").insert({ nom: nom.trim(), cup: cup.replace(/\D/g, "") || null, liste_id: listeId });
     if (error) return setErreur(error.message);
     setNom("");
     setCup("");
@@ -41,14 +78,30 @@ export default function Liste({ liste, scans, visite, recharger }: {
     else recharger();
   }
 
-  if (choix) return <><main /><ChoixProduits liste={liste} fermer={() => setChoix(false)} ajoutes={() => { setChoix(false); recharger(); }} /></>;
+  if (choix) return <><main /><ChoixProduits liste={liste} listeId={listeId} fermer={() => setChoix(false)} ajoutes={() => { setChoix(false); recharger(); }} /></>;
   if (lecteur) return <><main /><ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setCup(code); setLecteur(false); }} /></>;
 
   return (
     <main>
       {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
 
-      <form className="card" onSubmit={ajouter}>
+      <div className="chips">
+        <button className={listeId === null ? "on" : ""} onClick={() => choisir(null)}>Principale</button>
+        {listes.map((l) => <button key={l.id} className={listeId === l.id ? "on" : ""} onClick={() => choisir(l.id)}>{l.nom}</button>)}
+        {!lecture && <button onClick={() => { setRenommer(false); setNomListe(""); }}><IPlus /> Nouvelle liste</button>}
+      </div>
+      {nomListe !== null && (
+        <form className="card" onSubmit={enregistrerListe}>
+          <h2>{renommer ? "Renommer la liste" : "Nouvelle liste"}</h2>
+          <input value={nomListe} onChange={(e) => setNomListe(e.target.value)} placeholder="Ex. Produits laitiers, Relevé du lundi" maxLength={40} autoFocus />
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="primary grow" disabled={!nomListe.trim()}>{renommer ? "Renommer" : "Créer"}</button>
+            <button type="button" onClick={() => { setNomListe(null); setRenommer(false); }}>Annuler</button>
+          </div>
+        </form>
+      )}
+
+      {!lecture && <form className="card" onSubmit={ajouter}>
         <h2>Ajouter un produit à relever</h2>
         <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex. Beurre salé 454 g" />
         <div className="row" style={{ marginTop: 8 }}>
@@ -59,11 +112,11 @@ export default function Liste({ liste, scans, visite, recharger }: {
         <button type="button" className="full" style={{ marginTop: 10 }} onClick={() => setChoix(true)}>
           <IListe /> Choisir parmi mes produits déjà scannés
         </button>
-      </form>
+      </form>}
 
       <div className="card">
         <div className="row between" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0 }}>À relever</h2>
+          <h2 style={{ margin: 0 }}>{courante ? courante.nom : "À relever"}</h2>
           {liste.length > 0 && <span className="muted">{releves.size} sur {liste.length} relevés{visite ? ` · ${visite.banniere}` : ""}</span>}
         </div>
         {liste.length > 0 && <div className="bar"><i style={{ width: `${(releves.size / liste.length) * 100}%` }} /></div>}
@@ -81,10 +134,17 @@ export default function Liste({ liste, scans, visite, recharger }: {
               <div className="t">{p.nom}</div>
               {p.cup && <div className="s">CUP {p.cup}</div>}
             </div>
-            <button className="ghost icone" aria-label={`Retirer ${p.nom}`} onClick={() => retirer(p.id)}><IFermer /></button>
+            {!lecture && <button className="ghost icone" aria-label={`Retirer ${p.nom}`} onClick={() => retirer(p.id)}><IFermer /></button>}
           </div>
         ))}
       </div>
+      {courante && !lecture && nomListe === null && (
+        <div className="row" style={{ gap: 8 }}>
+          <button className="grow" onClick={() => { setRenommer(true); setNomListe(courante.nom); }}>Renommer la liste</button>
+          <button className="danger grow" onClick={confirmer ? supprimerListe : () => setConfirmer(true)}>{confirmer ? "Confirmer la suppression" : "Supprimer la liste"}</button>
+        </div>
+      )}
+      {confirmer && <div className="muted" style={{ textAlign: "center", marginTop: 8 }}>La liste et ses produits à relever seront effacés définitivement. Les prix déjà relevés ne sont pas touchés.</div>}
     </main>
   );
 }
@@ -97,7 +157,7 @@ function nomPourListe(g: Groupe): string {
 }
 
 /** Choix de produits déjà scannés à ajouter à la liste, plusieurs à la fois. */
-function ChoixProduits({ liste, fermer, ajoutes }: { liste: ProduitListe[]; fermer: () => void; ajoutes: () => void }) {
+function ChoixProduits({ liste, listeId, fermer, ajoutes }: { liste: ProduitListe[]; listeId: string | null; fermer: () => void; ajoutes: () => void }) {
   const sb = supabaseBrowser();
   const [groupes, setGroupes] = useState<Groupe[] | null>(null);
   const [coches, setCoches] = useState<Set<string>>(new Set());
@@ -139,7 +199,7 @@ function ChoixProduits({ liste, fermer, ajoutes }: { liste: ProduitListe[]; ferm
   }
 
   async function ajouter() {
-    const lignes = disponibles.filter((g) => coches.has(g.id)).map((g) => ({ nom: nomPourListe(g), cup: g.cup?.replace(/\D/g, "") || null }));
+    const lignes = disponibles.filter((g) => coches.has(g.id)).map((g) => ({ nom: nomPourListe(g), cup: g.cup?.replace(/\D/g, "") || null, liste_id: listeId }));
     if (!lignes.length) return;
     setEnvoi(true);
     const { error } = await sb.from("liste_produits").insert(lignes);

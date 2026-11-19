@@ -90,8 +90,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: acces } = await sb.rpc("verifier_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
-    if (!acces) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
+    const { data: role } = await sb.rpc("role_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
+    if (!role) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
+    // Accès en lecture seule : seuls les outils de consultation sont offerts.
+    const lecture = role !== "complet";
+    const outils = lecture ? OUTILS.filter((o) => ["lister_visites", "chercher_prix", "lister_liste"].includes(o.name)) : OUTILS;
     const body = await req.json().catch(() => ({}));
     // deno-lint-ignore no-explicit-any
     const historique = (Array.isArray(body.messages) ? body.messages : [])
@@ -118,6 +121,7 @@ Règles :
 - Appuie-toi toujours sur les outils pour les données ; n'invente jamais un prix.
 - Par défaut, les questions portent sur la visite en cours. Cherche dans toutes les visites pour les comparaisons.
 - Avant de supprimer, demande une confirmation. Après une modification, confirme en une phrase ce qui a changé.
+${lecture ? "- Cet utilisateur a un accès en lecture seule : tu peux consulter et comparer, mais rien ajouter, modifier ou supprimer. Dis-le simplement si on te le demande." : ""}
 Quand une photo est jointe :
 - Lis chaque carte de prix visible. Sauf demande contraire, ajoute chacune à la visite en cours avec ajouter_prix, puis résume ce qui a été ajouté (produit, format, prix, promo).
 - N'invente rien : un champ illisible ou absent est omis. Indique confiance « moyenne » ou « basse » si la lecture est incertaine, et dis-le dans ta réponse.
@@ -144,6 +148,7 @@ Quand une photo est jointe :
 
     async function executer(nom: string, a: Record<string, unknown>): Promise<unknown> {
       const champs = () => Object.fromEntries(NOMS_CHAMPS.filter((k) => a[k] !== undefined).map((k) => [k, a[k]]));
+      if (!outils.some((o) => o.name === nom)) return { erreur: "Action non permise avec un accès en lecture seule." };
       switch (nom) {
         case "lister_visites": {
           const { data, error } = await sb.from("visites").select("id, banniere, magasin, date_visite").order("date_visite", { ascending: false }).limit(100);
@@ -224,15 +229,26 @@ Quand une photo est jointe :
         { type: "text", text: dernier.content },
       ];
     }
+    // Suivi de l'utilisation (jetons facturés par Claude), noté une fois par message
+    const modele = base64 ? MODEL_PHOTO : MODEL;
+    let entree = 0;
+    let sortie = 0;
+    const noter = () => sb.from("usage_claude").insert({ fonction: "assistant", modele, entree, sortie, photos: base64 ? 1 : 0 });
     for (let tour = 0; tour < 8; tour++) {
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": cle, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: base64 ? MODEL_PHOTO : MODEL, max_tokens: 2000, system: systeme, tools: OUTILS, messages }),
+        body: JSON.stringify({ model: modele, max_tokens: 2000, system: systeme, tools: outils, messages }),
       });
       const rep = await r.json();
-      if (!r.ok) return json({ error: `Assistant indisponible : ${rep?.error?.message ?? r.status}` });
+      if (!r.ok) {
+        if (entree) await noter();
+        return json({ error: `Assistant indisponible : ${rep?.error?.message ?? r.status}` });
+      }
+      entree += rep.usage?.input_tokens ?? 0;
+      sortie += rep.usage?.output_tokens ?? 0;
       if (rep.stop_reason !== "tool_use") {
+        await noter();
         // deno-lint-ignore no-explicit-any
         const texte = (rep.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
         return json({ reponse: texte || "Je n'ai pas de réponse.", modifie });
@@ -246,6 +262,7 @@ Quand une photo est jointe :
       }
       messages.push({ role: "user", content: resultats });
     }
+    await noter();
     return json({ reponse: "La demande est trop longue à traiter. Essaie de la préciser.", modifie });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "Erreur inconnue" });

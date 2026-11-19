@@ -2,18 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lireJeton, supabaseBrowser } from "@/lib/supabase";
-import { comparer, cupNormalise, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe } from "@/lib/comparaison";
+import { alertes, comparer, cupNormalise, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
 import { IComparer, IRecherche, PastilleBanniere, argent, chargerReferences, chargerTout, dateLisible } from "./ui";
 
-export type VueAnalyse = "comparer" | "tableau" | "variations" | "reference";
+export type VueAnalyse = "comparer" | "tableau" | "variations" | "alertes" | "reference";
 
 const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %`;
 
 /** Onglet Analyse : comparaison entre bannières, tableau de bord, variations de prix et prix de référence. */
-export default function Analyse({ historique, vueInitiale, visiteId, refuse }: {
+export default function Analyse({ historique, vueInitiale, visiteId, refuse, seuil, changerSeuil, lecture }: {
+  seuil: number;
+  changerSeuil: (s: number) => void;
+  lecture: boolean;
   historique: (g: Groupe) => void;
   vueInitiale: VueAnalyse;
   visiteId: string | null;
@@ -27,7 +30,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse }: {
   const [erreur, setErreur] = useState("");
   const [recherche, setRecherche] = useState("");
   const [tous, setTous] = useState(false);
-  const [cetteVisite, setCetteVisite] = useState(vueInitiale === "variations" && Boolean(visiteId));
+  const [cetteVisite, setCetteVisite] = useState((vueInitiale === "variations" || vueInitiale === "alertes") && Boolean(visiteId));
   const [message, setMessage] = useState("");
   const [envoi, setEnvoi] = useState(false);
   const [confirmerVider, setConfirmerVider] = useState(false);
@@ -59,6 +62,8 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse }: {
     return mots.every((m) => texte.includes(m));
   };
   const reference = (g: Groupe) => refs.get(cupNormalise(g.cup));
+  const [seuilTexte, setSeuilTexte] = useState(String(seuil).replace(".", ","));
+  const depassements = useMemo(() => alertes(lignes, (cup) => refs.get(cupNormalise(cup))?.prix, seuil), [lignes, refs, seuil]);
 
   async function importer(fichiers: FileList | null) {
     if (!fichiers?.length) return;
@@ -100,10 +105,11 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse }: {
         {puce("comparer", "Comparer")}
         {puce("tableau", "Tableau de bord")}
         {puce("variations", `Variations${changements.length ? ` (${changements.length})` : ""}`)}
+        {puce("alertes", `Alertes${depassements.length ? ` (${depassements.length})` : ""}`)}
         {puce("reference", "Référence")}
       </div>
 
-      {(vue === "comparer" || vue === "variations") && (
+      {(vue === "comparer" || vue === "variations" || vue === "alertes") && (
         <div className="search">
           <IRecherche />
           <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher un produit" />
@@ -296,6 +302,63 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse }: {
         );
       })()}
 
+      {/* ---------- Alertes ---------- */}
+      {vue === "alertes" && scans !== null && (() => {
+        const visibles = depassements.filter((a) => correspond(a.groupe) && (!cetteVisite || a.obs.visite_id === visiteId));
+        const vsRef = visibles.filter((a) => a.type === "reference");
+        const entre = visibles.filter((a) => a.type === "bannieres");
+        const enregistrerSeuil = () => {
+          const v = parseFloat(seuilTexte.replace(",", "."));
+          if (Number.isFinite(v) && v > 0 && v !== seuil) changerSeuil(Math.round(v * 10) / 10);
+          else setSeuilTexte(String(seuil).replace(".", ","));
+        };
+        return (
+          <>
+            <div className="card seuil">
+              <div className="grow">
+                <b>Seuil d'alerte</b>
+                <div className="muted">Un écart de prix égal ou supérieur à ce pourcentage est signalé.</div>
+              </div>
+              <input value={seuilTexte} inputMode="decimal" disabled={lecture} aria-label="Seuil d'alerte en pourcentage"
+                onChange={(e) => setSeuilTexte(e.target.value)} onBlur={enregistrerSeuil} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
+              <span>%</span>
+            </div>
+            {visiteId && (
+              <div className="chips">
+                <button className={!cetteVisite ? "on" : ""} onClick={() => setCetteVisite(false)}>Toutes les visites</button>
+                <button className={cetteVisite ? "on" : ""} onClick={() => setCetteVisite(true)}>Visite en cours</button>
+              </div>
+            )}
+            {!visibles.length && (
+              <div className="card empty">
+                <IComparer />
+                <div>Aucun écart au-dessus de {String(seuil).replace(".", ",")} %.</div>
+                <div className="muted">Les alertes comparent chaque prix à ta liste de référence, et les bannières entre elles pour un même produit.</div>
+              </div>
+            )}
+            {[{ titre: "Par rapport à ma référence", liste: vsRef }, { titre: "Entre bannières", liste: entre }].map(({ titre, liste }) => liste.length > 0 && (
+              <div className="card" key={titre}>
+                <h2>{titre} ({liste.length})</h2>
+                {liste.map((a) => (
+                  <div key={`${a.type}-${a.groupe.id}-${a.banniere}`} className="tx" role="button" onClick={() => historique(a.groupe)}>
+                    <IconeProduit icone={a.groupe.icone} categorie={a.groupe.categorie} />
+                    <div className="mid">
+                      <div className="t">{a.groupe.nom}</div>
+                      <div className="s">{[a.groupe.marque, a.groupe.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+                      <div className="s">{a.banniere} {argent(a.prix)} · {a.baseNom} {argent(a.base)}</div>
+                    </div>
+                    <div className="r">
+                      <b className={a.pct > 0 ? "hausse" : "baisse"}>{pct(a.pct)}</b>
+                      <span className="muted">{a.prix - a.base > 0 ? "+" : "−"}{argent(Math.abs(a.prix - a.base))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>
+        );
+      })()}
+
       {/* ---------- Référence ---------- */}
       {vue === "reference" && (
         <>
@@ -308,11 +371,11 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse }: {
             </p>
             {message && <div className="alert info">{message}</div>}
             <div className="actions">
-              <label className={`bouton primary full ${envoi ? "inactif" : ""}`}>
+              {!lecture && <label className={`bouton primary full ${envoi ? "inactif" : ""}`}>
                 {envoi ? "Import en cours…" : "Importer un fichier"}
                 <input type="file" accept=".xlsx,.csv,.txt" disabled={envoi} onChange={(e) => { importer(e.target.files); e.target.value = ""; }} />
-              </label>
-              {nbRefs !== null && nbRefs > 0 && (
+              </label>}
+              {!lecture && nbRefs !== null && nbRefs > 0 && (
                 <button className="danger full" onClick={confirmerVider ? vider : () => setConfirmerVider(true)}>
                   {confirmerVider ? "Confirmer : effacer toute la liste" : "Vider la liste"}
                 </button>

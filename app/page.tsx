@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabase";
 import { correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe } from "@/lib/comparaison";
+import { filigraner } from "@/lib/filigrane";
 import { ajouterPhoto, photosEnAttente, retirerPhoto, type PhotoEnAttente } from "@/lib/file";
 import { prixParUnite, texteUnite } from "@/lib/unite";
-import type { ProduitListe, Reference, Scan, Visite } from "@/lib/types";
+import { REGLAGES_DEFAUT, lireReglages, type Acces, type ListeNom, type ProduitListe, type Reference, type Reglages as TReglages, type Scan, type ScanAvecVisite, type Visite } from "@/lib/types";
+import Reglages from "./composants/Reglages";
 import Assistant from "./composants/Assistant";
 import Code from "./composants/Code";
 import Demarrage from "./composants/Demarrage";
@@ -16,7 +18,7 @@ import Liste from "./composants/Liste";
 import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
-  IAssistant, ICamera, IComparer, ICrayon, IEtiquette, IExport, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  IAssistant, ICamera, IComparer, ICrayon, IReglages, IEtiquette, IExport, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
   PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
@@ -94,6 +96,18 @@ function App({ refuse }: { refuse: () => void }) {
   const [confirmerDoublons, setConfirmerDoublons] = useState(false);
   const visiteRef = useRef<Visite | null>(null);
   visiteRef.current = visite;
+  const [listes, setListes] = useState<ListeNom[]>([]);
+  const [listeId, setListeId] = useState<string | null>(() => { try { return localStorage.getItem("scanprix.listeId"); } catch { return null; } });
+  const [reglages, setReglages] = useState<TReglages>(REGLAGES_DEFAUT);
+  const reglagesRef = useRef(reglages);
+  reglagesRef.current = reglages;
+  const [acces, setAcces] = useState<Acces | null>(null);
+  const [ouvrirReglages, setOuvrirReglages] = useState<null | "filigrane" | "corbeille">(null);
+  const [annulable, setAnnulable] = useState<{ objetId: string; texte: string } | null>(null);
+  const [tout, setTout] = useState<ScanAvecVisite[] | null>(null); // tous les prix, pour la recherche dans les autres visites
+  const [version, setVersion] = useState(0); // augmente quand les données changent ailleurs que dans la visite en cours
+  const [rapportEnCours, setRapportEnCours] = useState(false);
+  const lecture = acces?.role === "lecture";
 
   // Copie locale des dernières données : l'app reste utilisable sans réseau.
   const lireCache = <T,>(cle: string): T | null => {
@@ -102,6 +116,36 @@ function App({ refuse }: { refuse: () => void }) {
   const ecrireCache = (cle: string, valeur: unknown) => {
     try { localStorage.setItem(cle, JSON.stringify(valeur)); } catch { /* stockage plein ou indisponible */ }
   };
+
+  // Réglages (signature des photos, seuil d'alerte, tarifs) et type d'accès
+  const chargerAcces = useCallback(() => {
+    sb.rpc("etat_acces").then(({ data }) => { if (data) setAcces(data as Acces); });
+  }, [sb]);
+  useEffect(() => {
+    const cache = lireCache<unknown>("scanprix.reglages");
+    if (cache) setReglages(lireReglages(cache));
+    sb.from("reglages").select("donnees").eq("id", 1).maybeSingle().then(({ data }) => {
+      if (!data) return;
+      setReglages(lireReglages(data.donnees));
+      ecrireCache("scanprix.reglages", data.donnees);
+    });
+    chargerAcces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sb, chargerAcces]);
+
+  const enregistrerReglages = useCallback(async (r: TReglages): Promise<string | null> => {
+    const { data, error } = await sb.from("reglages").upsert({ id: 1, donnees: r, modifie_le: new Date().toISOString() }).select("id");
+    if (error || !data?.length) return /row-level/i.test(error?.message ?? "row-level") ? "Accès en lecture seule : modification refusée." : error!.message;
+    setReglages(r);
+    try { localStorage.setItem("scanprix.reglages", JSON.stringify(r)); } catch { /* stockage indisponible */ }
+    return null;
+  }, [sb]);
+
+  const chargerVisites = useCallback(async () => {
+    const { data } = await sb.from("visites").select("*").order("created_at", { ascending: false }).limit(200);
+    if (data) setVisites(data as Visite[]);
+    return (data ?? []) as Visite[];
+  }, [sb]);
 
   // Visites : on reprend la plus récente à l'ouverture
   useEffect(() => {
@@ -137,13 +181,27 @@ function App({ refuse }: { refuse: () => void }) {
   }, [sb]);
 
   const chargerListe = useCallback(async () => {
-    const { data, error } = await sb.from("liste_produits").select("*").order("created_at");
-    if (error) setListe(lireCache<ProduitListe[]>("scanprix.liste") ?? []);
+    const requete = sb.from("liste_produits").select("*").order("created_at");
+    const { data, error } = await (listeId ? requete.eq("liste_id", listeId) : requete.is("liste_id", null));
+    const cache = lireCache<{ id: string | null; produits: ProduitListe[] }>("scanprix.liste");
+    if (error) setListe(cache && !Array.isArray(cache) && cache.id === listeId ? cache.produits : []);
     else {
       setListe((data ?? []) as ProduitListe[]);
-      ecrireCache("scanprix.liste", data ?? []);
+      ecrireCache("scanprix.liste", { id: listeId, produits: data ?? [] });
     }
+  }, [sb, listeId]);
+
+  const chargerListes = useCallback(async () => {
+    const { data, error } = await sb.from("listes").select("*").order("created_at");
+    if (error) return;
+    setListes((data ?? []) as ListeNom[]);
+    // La liste choisie n'existe plus (supprimée sur un autre appareil) : retour à la liste principale
+    setListeId((id) => (id && !(data ?? []).some((l) => l.id === id) ? null : id));
   }, [sb]);
+  useEffect(() => { chargerListes(); }, [chargerListes]);
+  useEffect(() => {
+    try { if (listeId) localStorage.setItem("scanprix.listeId", listeId); else localStorage.removeItem("scanprix.listeId"); } catch { /* stockage indisponible */ }
+  }, [listeId]);
 
   useEffect(() => { chargerScans(); }, [chargerScans, visite]);
   useEffect(() => { chargerListe(); }, [chargerListe]);
@@ -255,7 +313,12 @@ function App({ refuse }: { refuse: () => void }) {
     setErreur("");
     for (const fichier of Array.from(files)) {
       try {
-        const [{ image, originale }, priseLe] = await Promise.all([reduire(fichier), datePhoto(fichier)]);
+        const [{ image, originale: grande }, priseLe] = await Promise.all([reduire(fichier), datePhoto(fichier)]);
+        // Signature au bas de la photo gardée (jamais sur l'image envoyée en lecture, ni sur une page de circulaire)
+        const f = reglagesRef.current.filigrane;
+        const originale = f.actif && mode === "carte"
+          ? await filigraner(fichier, f, priseLe, [v.banniere, v.magasin].filter(Boolean).join(" · ")).catch(() => grande)
+          : grande;
         const p: PhotoEnAttente = { id: crypto.randomUUID(), visiteId: v.id, image, originale, priseLe, mode };
         await ajouterPhoto(p).catch(() => { memoire.current.set(p.id, p); });
       } catch {
@@ -294,6 +357,66 @@ function App({ refuse }: { refuse: () => void }) {
     }
   }
 
+  async function rapport(v: Visite) {
+    setRapportEnCours(true);
+    setErreur("");
+    try {
+      const res = await fetch(`/api/rapport?visite=${v.id}`, { headers: { "x-jeton": lireJeton() ?? "" } });
+      if (res.status === 401) return refuse();
+      if (!res.ok) throw new Error((await res.json()).error || "Rapport impossible");
+      const blob = await res.blob();
+      const nom = `rapport-${v.banniere.toLowerCase().replace(/\s+/g, "-")}-${v.date_visite}.pdf`;
+      const fichier = new File([blob], nom, { type: "application/pdf" });
+      if (navigator.canShare?.({ files: [fichier] })) await navigator.share({ files: [fichier] }).catch(() => {});
+      else {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = nom;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      }
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Erreur inconnue");
+    } finally {
+      setRapportEnCours(false);
+    }
+  }
+
+  // Suppression annulable : l'élément est dans la corbeille, on propose de le récupérer pendant quelques secondes.
+  const proposerAnnulation = useCallback((objetId: string, texte: string) => {
+    setAnnulable({ objetId, texte });
+    setTimeout(() => setAnnulable((a) => (a?.objetId === objetId ? null : a)), 8000);
+  }, []);
+
+  async function annulerSuppression() {
+    const a = annulable;
+    if (!a) return;
+    setAnnulable(null);
+    const { data: ligne } = await sb.from("corbeille").select("id").eq("objet_id", a.objetId).order("supprime_le", { ascending: false }).limit(1).maybeSingle();
+    const { data, error } = ligne ? await sb.rpc("restaurer", { corbeille_id: ligne.id }) : { data: null, error: null };
+    if (error || !data?.ok) return setErreur("Récupération impossible. Regarde dans la corbeille (Réglages).");
+    apresRestauration();
+  }
+
+  async function apresRestauration() {
+    const l = await chargerVisites();
+    if (!visiteRef.current && l.length) setVisite(l[0]);
+    setNouvelle(false);
+    chargerScans();
+    setTout(null);
+    setVersion((n) => n + 1);
+  }
+
+  // Recherche : les produits des autres visites sont chargés à la première recherche
+  const cherche = recherche.trim().length >= 2;
+  useEffect(() => {
+    if (!cherche || tout) return;
+    let annule = false;
+    chargerTout(sb).then((t) => { if (!annule) setTout(t); }).catch(() => {});
+    return () => { annule = true; };
+  }, [sb, cherche, tout]);
+  useEffect(() => { setTout(null); }, [visiteId, version]);
+
   async function ouvrirHistorique(s: Scan) {
     try {
       const groupe = grouper(await chargerTout(sb)).find((g) => g.observations.some((o) => o.id === s.id));
@@ -330,6 +453,18 @@ function App({ refuse }: { refuse: () => void }) {
     const texte = normaliser([s.produit, s.marque, s.format, s.cup, s.code_article, s.categorie].filter(Boolean).join(" "));
     return mots.every((m) => texte.includes(m));
   });
+  // Mêmes mots cherchés dans les autres visites : un résultat par produit
+  const ailleurs = useMemo(() => {
+    if (!cherche || !tout || !mots.length) return [];
+    return grouper(tout)
+      .filter((g) => !g.observations.some((o) => o.visite_id === visiteId))
+      .filter((g) => {
+        const texte = normaliser([g.nom, g.marque, g.format, g.cup, g.categorie].filter(Boolean).join(" "));
+        return mots.every((m) => texte.includes(m));
+      })
+      .slice(0, 15);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cherche, tout, recherche, visiteId]);
   const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Analyse", assistant: "Assistant", visites: "Visites" };
   const aVerifier = scans.filter((s) => s.confiance && s.confiance !== "haute");
   const puce = (f: Filtre, libelle: string, n: number) => (
@@ -341,18 +476,27 @@ function App({ refuse }: { refuse: () => void }) {
       <header>
         <h1>{titres[onglet]}</h1>
         {onglet === "scan" && visite && (
-          <button className="small" disabled={exportEnCours || !scans.length} onClick={() => exporter(visite)}>
-            <IExport /> Excel
-          </button>
+          <span className="row">
+            <button className="small" disabled={rapportEnCours || !scans.length} onClick={() => rapport(visite)}>
+              <IJournal /> {rapportEnCours ? "…" : "Rapport"}
+            </button>
+            <button className="small" disabled={exportEnCours || !scans.length} onClick={() => exporter(visite)}>
+              <IExport /> Excel
+            </button>
+          </span>
         )}
         {onglet === "visites" && (
-          <button className="small" onClick={() => setNouvelle(true)}><IPlus /> Nouvelle</button>
+          <span className="row">
+            <button className="small" aria-label="Réglages" onClick={() => setOuvrirReglages("filigrane")}><IReglages /> Réglages</button>
+            {!lecture && <button className="small" onClick={() => setNouvelle(true)}><IPlus /> Nouvelle</button>}
+          </span>
         )}
       </header>
 
       {onglet === "scan" && (
         <main className="withfab">
           {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
+          {lecture && <div className="alert info">Accès en lecture seule : tu peux consulter, comparer et exporter.</div>}
 
           <div className="card visite">
             {visite && <PastilleBanniere banniere={visite.banniere} doux />}
@@ -371,8 +515,8 @@ function App({ refuse }: { refuse: () => void }) {
                 <b>Aucune visite</b>
               )}
             </div>
-            {visite && <button className="ghost icone" aria-label="Modifier la visite" onClick={() => setModifVisite(visite)}><ICrayon /></button>}
-            <button className="ghost icone" aria-label="Nouvelle visite" onClick={() => setNouvelle(true)}><IPlus /></button>
+            {visite && !lecture && <button className="ghost icone" aria-label="Modifier la visite" onClick={() => setModifVisite(visite)}><ICrayon /></button>}
+            {!lecture && <button className="ghost icone" aria-label="Nouvelle visite" onClick={() => setNouvelle(true)}><IPlus /></button>}
           </div>
 
           {visite && (
@@ -466,7 +610,7 @@ function App({ refuse }: { refuse: () => void }) {
                     <div className="muted">Photographie une carte de prix, ou importe des photos déjà prises.</div>
                   </div>
                 )}
-                {scans.length > 0 && !visibles.length && <div className="empty"><div>Aucun prix ne correspond.</div></div>}
+                {scans.length > 0 && !visibles.length && <div className="empty"><div>Aucun prix ne correspond dans cette visite.</div></div>}
                 {visibles.map((s) => {
                   const pu = promoUnitaire(s);
                   const unite = prixParUnite(prixEffectif(s), s.format);
@@ -505,14 +649,39 @@ function App({ refuse }: { refuse: () => void }) {
                   );
                 })}
               </div>
+
+              {ailleurs.length > 0 && (
+                <div className="card">
+                  <h2>Dans les autres visites</h2>
+                  {ailleurs.map((g) => {
+                    const dernier = g.observations[0];
+                    const bannieres = [...new Set(g.observations.map((o) => o.visites?.banniere).filter(Boolean))];
+                    return (
+                      <div key={g.id} className="tx" role="button" onClick={() => setHistorique(g)}>
+                        <IconeProduit icone={g.icone} categorie={g.categorie} />
+                        <div className="mid">
+                          <div className="t">{g.nom}</div>
+                          <div className="s">{[g.marque, g.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+                          <div className="s">{bannieres.join(", ")} · {g.observations.length} relevé{g.observations.length > 1 ? "s" : ""}</div>
+                        </div>
+                        <div className="r">
+                          <b>{argent(prixEffectif(dernier))}</b>
+                          {dernier.visites && <small>{dateLisible(dernier.visites.date_visite)}</small>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </main>
       )}
 
-      {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} />}
+      {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} listes={listes} listeId={listeId} choisir={setListeId} rechargerListes={chargerListes} lecture={lecture} />}
 
-      {onglet === "comparer" && <Analyse key={vueAnalyse} historique={setHistorique} vueInitiale={vueAnalyse} visiteId={visite?.id ?? null} refuse={refuse} />}
+      {onglet === "comparer" && <Analyse key={`${vueAnalyse}-${version}`} historique={setHistorique} vueInitiale={vueAnalyse} visiteId={visite?.id ?? null} refuse={refuse}
+        seuil={reglages.seuil} changerSeuil={(s) => { enregistrerReglages({ ...reglagesRef.current, seuil: s }).then((e) => e && setErreur(e)); }} lecture={lecture} />}
 
       {onglet === "assistant" && <Assistant visite={visite} modifie={() => { chargerScans(); chargerListe(); }} refuse={refuse} />}
 
@@ -529,7 +698,10 @@ function App({ refuse }: { refuse: () => void }) {
                   <div className="t">{v.banniere}{v.magasin ? ` · ${v.magasin}` : ""}</div>
                   <div className="s">{dateLisible(v.date_visite)}{v.id === visite?.id ? " · en cours" : ""}</div>
                 </div>
-                <button className="ghost icone" aria-label={`Modifier la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); setModifVisite(v); }}><ICrayon /></button>
+                {!lecture && <button className="ghost icone" aria-label={`Modifier la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); setModifVisite(v); }}><ICrayon /></button>}
+                <button className="small" disabled={rapportEnCours} aria-label={`Rapport de la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); rapport(v); }}>
+                  <IJournal /> PDF
+                </button>
                 <button className="small" disabled={exportEnCours} onClick={(e) => { e.stopPropagation(); exporter(v); }}>
                   <IExport /> Excel
                 </button>
@@ -539,11 +711,19 @@ function App({ refuse }: { refuse: () => void }) {
           <button className="full" disabled={exportEnCours || !visites.length} onClick={() => exporter(null)}>
             <IExport /> Exporter toutes les visites
           </button>
+          <button className="full" style={{ marginTop: 10 }} onClick={() => setOuvrirReglages("corbeille")}>Corbeille</button>
           <button className="full ghost" style={{ marginTop: 10 }} onClick={refuse}>Verrouiller l'app</button>
         </main>
       )}
 
-      {onglet === "scan" && visite && (
+      {annulable && (
+        <div className="annuler">
+          <span>{annulable.texte}</span>
+          <button onClick={annulerSuppression}>Annuler</button>
+        </div>
+      )}
+
+      {onglet === "scan" && visite && !lecture && (
         <div className="fab">
           <div className="fabrow">
             <button className="principal" onClick={() => setRafale(true)}>
@@ -589,6 +769,8 @@ function App({ refuse }: { refuse: () => void }) {
               if (!reste.length) setNouvelle(true);
             }
             setModifVisite(null);
+            setVersion((n) => n + 1);
+            proposerAnnulation(id, "Visite supprimée.");
           }}
         />
       )}
@@ -598,8 +780,9 @@ function App({ refuse }: { refuse: () => void }) {
           scan={edition}
           fermer={() => setEdition(null)}
           enregistre={(s) => { setScans((l) => l.map((x) => (x.id === s.id ? s : x))); setEdition(null); }}
-          supprime={(id) => { setScans((l) => l.filter((x) => x.id !== id)); setEdition(null); }}
+          supprime={(id) => { setScans((l) => l.filter((x) => x.id !== id)); setEdition(null); proposerAnnulation(id, "Prix supprimé."); }}
           historique={ouvrirHistorique}
+          lecture={lecture}
         />
       )}
 
@@ -637,7 +820,21 @@ function App({ refuse }: { refuse: () => void }) {
 
       {rafale && <Rafale fermer={() => setRafale(false)} photo={photographier} enCours={enCours} />}
 
-      {historique && <Historique groupe={historique} fermer={() => setHistorique(null)} />}
+      {historique && <Historique groupe={historique} fermer={() => setHistorique(null)} lecture={lecture} modifie={() => { setVersion((n) => n + 1); chargerScans(); }} />}
+
+      {ouvrirReglages && (
+        <Reglages
+          reglages={reglages}
+          enregistrer={enregistrerReglages}
+          acces={acces}
+          rechargerAcces={chargerAcces}
+          visite={visite}
+          sectionInitiale={ouvrirReglages}
+          fermer={() => setOuvrirReglages(null)}
+          restaure={apresRestauration}
+          verrouiller={refuse}
+        />
+      )}
     </div>
   );
 }

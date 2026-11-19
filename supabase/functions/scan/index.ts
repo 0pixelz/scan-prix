@@ -75,8 +75,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: acces } = await sb.rpc("verifier_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
-    if (!acces) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
+    const { data: role } = await sb.rpc("role_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
+    if (!role) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
+    if (role !== "complet") return json({ error: "Accès en lecture seule : tu ne peux pas ajouter de prix." });
     const { image, visiteId, mode, priseLe } = await req.json().catch(() => ({}));
     const circulaire = mode === "circulaire";
     const prise = typeof priseLe === "string" && !Number.isNaN(Date.parse(priseLe)) ? new Date(priseLe).toISOString() : null;
@@ -108,6 +109,11 @@ Deno.serve(async (req) => {
     });
     const msg = await rep.json();
     if (!rep.ok) return json({ error: `Lecture de la photo impossible : ${msg?.error?.message ?? rep.status}` });
+    // Suivi de l'utilisation (jetons facturés par Claude)
+    await sb.from("usage_claude").insert({
+      fonction: circulaire ? "circulaire" : "scan", modele: MODEL, photos: 1,
+      entree: msg.usage?.input_tokens ?? 0, sortie: msg.usage?.output_tokens ?? 0,
+    });
 
     // deno-lint-ignore no-explicit-any
     const bloc = (msg.content ?? []).find((b: any) => b.type === "tool_use");

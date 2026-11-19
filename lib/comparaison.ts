@@ -20,6 +20,7 @@ export function cles(s: Scan): string[] {
   if (cup.length >= 6) k.push(`cup:${cup}`);
   const cle = cleTriee(s.cle_produit || [s.marque, s.produit, s.format].filter(Boolean).join(" "));
   if (cle) k.push(`cle:${cle}`);
+  if (s.groupe_manuel) k.push(`man:${s.groupe_manuel}`); // association faite à la main
   return k;
 }
 
@@ -224,4 +225,38 @@ export function distanceMetres(a: { latitude: number; longitude: number }, b: { 
   const dLon = (b.longitude - a.longitude) * rad;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * rad) * Math.cos(b.latitude * rad) * Math.sin(dLon / 2) ** 2;
   return 6371000 * 2 * Math.asin(Math.sqrt(h));
+}
+
+
+export type Alerte = {
+  groupe: Groupe;
+  type: "reference" | "bannieres";
+  banniere: string; // bannière dont le prix déclenche l'alerte
+  obs: ScanAvecVisite;
+  prix: number;
+  base: number; // prix auquel on compare : ma référence, ou le prix le plus bas ailleurs
+  baseNom: string;
+  pct: number;
+};
+
+/**
+ * Écarts qui dépassent le seuil (en %) : un prix relevé par rapport à ma référence,
+ * et la bannière la plus chère par rapport à la moins chère pour un même produit.
+ */
+export function alertes(lignes: LigneComparaison[], reference: (cup: string | null) => number | undefined, seuil: number): Alerte[] {
+  const liste: Alerte[] = [];
+  for (const l of lignes) {
+    const ref = reference(l.groupe.cup);
+    if (ref && ref > 0) {
+      for (const b of l.parBanniere) {
+        const pct = ((b.prix - ref) / ref) * 100;
+        if (Math.abs(pct) >= seuil) liste.push({ groupe: l.groupe, type: "reference", banniere: b.banniere, obs: b.obs, prix: b.prix, base: ref, baseNom: "Ma référence", pct });
+      }
+    }
+    if (l.parBanniere.length > 1 && l.ecartPct >= seuil) {
+      const cher = l.parBanniere[l.parBanniere.length - 1];
+      liste.push({ groupe: l.groupe, type: "bannieres", banniere: cher.banniere, obs: cher.obs, prix: cher.prix, base: l.min, baseNom: l.parBanniere[0].banniere, pct: l.ecartPct });
+    }
+  }
+  return liste.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 }

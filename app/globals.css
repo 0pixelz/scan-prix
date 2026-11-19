@@ -424,3 +424,37 @@ label.bouton input { display: none; }
 .panel.selection .defile { flex: 1; min-height: 120px; overflow-y: auto; -webkit-overflow-scrolling: touch; margin: 4px -4px 0; padding: 0 4px; }
 .panel.selection .actions { flex: none; margin-top: 10px; }
 .panel.selection .ghost { align-self: flex-start; }
+
+/* ---------- Graphique d'évolution des prix ---------- */
+:root { --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948; }
+@media (prefers-color-scheme: dark) {
+  :root { --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767; }
+}
+.graphique { margin-top: 12px; padding: 10px 10px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.graphique svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.graphique .grille { stroke: var(--line); stroke-width: 1; }
+.graphique .repere { stroke: var(--muted); stroke-width: 1; }
+.graphique .axe { fill: var(--muted); font-size: 9.5px; }
+.graphique .fin { fill: var(--text); font-size: 10px; font-weight: 600; }
+.graphique .trace { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.graphique .marque { stroke: var(--card); stroke-width: 2; }
+.legende { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+.legende span, .bulle { display: flex; align-items: center; gap: 6px; }
+.legende i, .bulle i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.bulle { min-height: 22px; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.bulle b { color: var(--text); }
+
+/* ---------- Alertes, réglages, corbeille ---------- */
+.card.seuil { display: flex; align-items: center; gap: 10px; }
+.card.seuil input { width: 68px; text-align: right; }
+.panel.reglages .bloc { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.panel.reglages .bloc .tableau { margin-top: 6px; }
+.panel.reglages .bloc .tableau > div { grid-template-columns: 1.6fr 0.7fr 1fr; }
+.panel.reglages .tx button.small { flex: none; }
+.apercufili { height: 170px; border-radius: 12px; background: linear-gradient(135deg, #94a3b8, #475569); position: relative; overflow: hidden; }
+.apercufili > div { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.9); color: #111827; font-size: 11.5px; font-weight: 500; }
+.apercufili img { height: 20px; width: auto; align-self: flex-start; margin-bottom: 4px; }
+.apercufili .nom { font-weight: 700; }
+.annuler { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(150px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--text); color: var(--bg); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); font-size: 14px; white-space: nowrap; }
+.annuler button { border: 0; border-radius: 999px; padding: 6px 14px; background: var(--bg); color: var(--text); font-weight: 600; }
+header .row { gap: 8px; }
