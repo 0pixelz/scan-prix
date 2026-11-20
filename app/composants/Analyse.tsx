@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lireJeton, supabaseBrowser } from "@/lib/supabase";
-import { alertes, comparer, cupNormalise, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe, imageGroupe } from "@/lib/comparaison";
+import { alertes, comparer, cupNormalise, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { PromoCirculaire, Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
@@ -149,7 +149,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
               return (
                 <div key={l.groupe.id} className="card cmp" role="button" onClick={() => historique(l.groupe)}>
                   <div className="row between" style={{ gap: 12 }}>
-                    <IconeProduit icone={l.groupe.icone} categorie={l.groupe.categorie} image={imageGroupe(l.groupe)} />
+                    <IconeProduit icone={l.groupe.icone} categorie={l.groupe.categorie} />
                     <div className="grow">
                       <div className="t">{l.groupe.nom}</div>
                       <div className="s">{[l.groupe.marque, l.groupe.format, l.groupe.categorie].filter(Boolean).join(" · ") || "Aucun détail"}</div>
@@ -292,7 +292,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                 <h2>Hausses : {visibles.filter((c) => c.delta > 0).length} · Baisses : {visibles.filter((c) => c.delta < 0).length}</h2>
                 {visibles.map((c) => (
                   <div key={`${c.groupe.id}-${c.banniere}`} className="tx" role="button" onClick={() => historique(c.groupe)}>
-                    <IconeProduit icone={c.groupe.icone} categorie={c.groupe.categorie} image={imageGroupe(c.groupe)} />
+                    <IconeProduit icone={c.groupe.icone} categorie={c.groupe.categorie} />
                     <div className="mid">
                       <div className="t">{c.groupe.nom}</div>
                       <div className="s">{[c.banniere, c.groupe.format].filter(Boolean).join(" · ")}</div>
@@ -353,7 +353,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                 <h2>{titre} ({liste.length})</h2>
                 {liste.map((a) => (
                   <div key={`${a.type}-${a.groupe.id}-${a.banniere}`} className="tx" role="button" onClick={() => historique(a.groupe)}>
-                    <IconeProduit icone={a.groupe.icone} categorie={a.groupe.categorie} image={imageGroupe(a.groupe)} />
+                    <IconeProduit icone={a.groupe.icone} categorie={a.groupe.categorie} />
                     <div className="mid">
                       <div className="t">{a.groupe.nom}</div>
                       <div className="s">{[a.groupe.marque, a.groupe.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>

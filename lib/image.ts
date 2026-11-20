@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { normaliser } from "./comparaison";
 import { lireFormat } from "./unite";
 
@@ -25,15 +26,28 @@ export function codesPossibles(cup: string | null | undefined): string[] {
   return [...new Set(codes)];
 }
 
-/** Adresse de la petite image du produit, ou null s'il n'est pas dans la base. */
+// Bases ouvertes interrogées dans l'ordre : aliments, puis produits pour animaux, produits courants et soins.
+const BASES = ["world.openfoodfacts.org", "world.openpetfoodfacts.org", "world.openproductsfacts.org", "world.openbeautyfacts.org"];
+const imagePermise = (url: unknown): url is string => typeof url === "string" && /^https:\/\/images\.open(food|petfood|products|beauty)facts\.org\//.test(url);
+
+/** Adresse de l'image en grand, pour l'agrandissement. */
+export const imageEnGrand = (url: string) => url.replace(/\.(200|400)\.jpg$/, ".full.jpg");
+
+/** D'où vient l'image, pour l'afficher sous la photo. */
+export const sourceImage = (url: string) => (url.includes("wishabi") ? "circulaire (Flipp)" : url.includes("openfoodfacts") ? "Open Food Facts" : "base ouverte Open Facts");
+
+/** Adresse de la petite image du produit, ou null s'il n'est dans aucune base. */
 export async function imageProduit(cup: string | null | undefined): Promise<string | null> {
-  for (const code of codesPossibles(cup)) {
-    try {
-      const rep = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=code,image_front_small_url`);
-      if (!rep.ok) continue;
-      const url = (await rep.json())?.product?.image_front_small_url;
-      if (typeof url === "string" && url.startsWith("https://images.openfoodfacts.org/")) return url;
-    } catch { /* hors ligne ou service indisponible : on réessaiera plus tard */ return null; }
+  const codes = codesPossibles(cup);
+  for (const base of BASES) {
+    for (const code of codes) {
+      try {
+        const rep = await fetch(`https://${base}/api/v2/product/${code}.json?fields=code,image_front_small_url`);
+        if (!rep.ok) continue;
+        const url = (await rep.json())?.product?.image_front_small_url;
+        if (imagePermise(url)) return url;
+      } catch { /* hors ligne ou service indisponible : on réessaiera plus tard */ return null; }
+    }
   }
   return null;
 }
@@ -63,7 +77,7 @@ export async function imageParDescription(nom: string | null, marque: string | n
   const canadiens = (p: Record<string, unknown>) => (Array.isArray(p.countries_tags) && p.countries_tags.includes("en:canada") ? 0 : 1);
   for (const p of [...produits].sort((a, b) => canadiens(a) - canadiens(b))) {
     const url = p.image_front_small_url;
-    if (typeof url !== "string" || !url.startsWith("https://images.openfoodfacts.org/")) continue;
+    if (!imagePermise(url)) continue;
     const marques = ` ${normaliser(String(p.brands ?? ""))} `;
     if (!motsMarque.every((m) => marques.includes(` ${m} `))) continue;
     const texte = ` ${normaliser([p.product_name_fr, p.product_name, p.generic_name_fr].filter(Boolean).join(" "))} `;
@@ -75,4 +89,24 @@ export async function imageParDescription(nom: string | null, marque: string | n
     return url;
   }
   return null;
+}
+
+/**
+ * Image d'un produit, dans l'ordre : par code-barres dans les bases ouvertes, par description exacte dans
+ * Open Food Facts, puis dans une offre de circulaire au même format (si le code postal est réglé).
+ * Renvoie undefined si un service ne répondait pas (à réessayer), null si rien d'exact n'existe.
+ */
+export async function chercherImage(sb: SupabaseClient, s: { cup: string | null; produit: string | null; marque: string | null; format: string | null }, codePostal?: string): Promise<string | null | undefined> {
+  if (s.cup) {
+    const parCode = await imageProduit(s.cup);
+    if (parCode) return parCode;
+  }
+  const parTexte = await imageParDescription(s.produit, s.marque, s.format);
+  if (parTexte) return parTexte;
+  if (codePostal && s.produit && s.marque && s.format) {
+    const { data, error } = await sb.functions.invoke("image", { body: { nom: s.produit, marque: s.marque, format: s.format, codePostal } });
+    if (error) return undefined;
+    if (typeof data?.url === "string" && data.url.startsWith("https://f.wishabi.net/")) return data.url;
+  }
+  return parTexte;
 }

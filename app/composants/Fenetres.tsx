@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
-import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type Groupe, imageGroupe } from "@/lib/comparaison";
+import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
-import { imageParDescription, imageProduit } from "@/lib/image";
+import { chercherImage, imageEnGrand, sourceImage } from "@/lib/image";
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
@@ -195,8 +195,9 @@ export function ScannerCode({ fermer, lu }: { fermer: () => void; lu: (code: str
 
 const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "points", "points_details", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
 
-export function Edition({ scan, fermer, enregistre, supprime, historique, lecture }: {
+export function Edition({ scan, fermer, enregistre, supprime, historique, lecture, codePostal }: {
   scan: Scan;
+  codePostal?: string;
   lecture?: boolean;
   fermer: () => void;
   enregistre: (s: Scan) => void;
@@ -266,13 +267,15 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   if (lecteur) return <ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setF((v) => ({ ...v, cup: code })); setLecteur(false); }} />;
   // Photo du vrai produit : celle déjà trouvée, sinon cherchée par le code-barres
   const [imageP, setImageP] = useState<string | null>(scan.image_produit ?? null);
+  const [produitAgrandi, setProduitAgrandi] = useState(false);
   useEffect(() => {
     if (scan.image_produit) return;
     let annule = false;
-    (scan.cup ? imageProduit(scan.cup) : imageParDescription(scan.produit, scan.marque, scan.format)).then((url) => { if (!annule && url) setImageP(url); });
+    chercherImage(sb, scan, codePostal).then((url) => { if (!annule && url) setImageP(url); });
     return () => { annule = true; };
   }, [scan.image_produit, scan.cup, scan.produit, scan.marque, scan.format]);
 
+  if (produitAgrandi && imageP) return <Visionneuse src={imageEnGrand(imageP)} fermer={() => setProduitAgrandi(false)} />;
   if (agrandie && photo) return <Visionneuse src={photo} fermer={() => setAgrandie(false)} />;
 
   return (
@@ -285,11 +288,13 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
         </div>
         {imageP && (
           <div className="entete-produit">
-            <img src={imageP.replace(/\.200\.jpg$/, ".400.jpg")} alt={`Photo du produit ${scan.produit ?? ""}`} onError={() => setImageP(null)} />
+            <button type="button" aria-label="Agrandir la photo du produit" onClick={() => setProduitAgrandi(true)}>
+              <img src={imageP.replace(/\.200\.jpg$/, ".400.jpg")} alt={`Photo du produit ${scan.produit ?? ""}`} onError={() => setImageP(null)} />
+            </button>
             <div>
               <b>{scan.produit || "Produit non lu"}</b>
               <span>{[scan.marque, scan.format].filter(Boolean).join(" · ")}</span>
-              <small>Image : Open Food Facts</small>
+              <small>Image : {sourceImage(imageP)} · touche pour agrandir</small>
             </div>
           </div>
         )}
@@ -443,7 +448,7 @@ export function Historique({ groupe: initial, fermer, modifie, lecture }: { grou
             {!visibles.length && <div className="empty"><div>Aucun produit trouvé.</div></div>}
             {visibles.slice(0, 60).map((g) => (
               <div key={g.id} className="tx" role="button" onClick={() => !occupe && associer(g)}>
-                <IconeProduit icone={g.icone} categorie={g.categorie} image={imageGroupe(g)} />
+                <IconeProduit icone={g.icone} categorie={g.categorie} />
                 <div className="mid">
                   <div className="t">{g.nom}</div>
                   <div className="s">{[g.marque, g.format, [...new Set(g.observations.map((o) => o.visites?.banniere).filter(Boolean))].join(", ")].filter(Boolean).join(" · ") || "Aucun détail"}</div>

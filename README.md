@@ -27,7 +27,8 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   - *Référence* : import d'un fichier Excel ou CSV (colonnes CUP et Prix) ; chaque relevé affiche son écart.
 - **Assistant** : discussion avec Claude pour résumer, comparer, corriger, gérer la liste, ou lire une photo.
 - **Prix membre et points** : repérés par Claude, affichés sur chaque prix et dans l'Excel.
-- **Excel** : six onglets — Résumé par visite, Comparaison entre bannières, Alertes, Circulaires, Variations, Prix (données brutes
+- **Excel** : sept onglets — Résumé par visite, Comparaison entre bannières, Alertes, Circulaires, Variations,
+  Produits (photo, description, prix et bannière la moins chère), Prix (données brutes
   avec prix par unité, source carte ou circulaire, prix de référence et écart).
 
 - **Historique d'un produit** : graphique d'évolution du prix (une ligne par bannière) et liste des relevés.
@@ -59,7 +60,9 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 
 - **Photo du produit** : quand le code-barres est lu, l'image du vrai produit est cherchée dans Open Food Facts
   (base ouverte) et remplace l'icône. Le CUP imprimé sans chiffre de contrôle est complété automatiquement.
-  Sans code-barres, la recherche se fait par description et ne garde qu'une correspondance exacte (marque, nom, format).
+  Sans code-barres ou si le code est inconnu, la recherche se fait par description et ne garde qu'une
+  correspondance exacte (marque, nom, format), dans Open Food Facts puis dans les offres de circulaires.
+  Toucher la photo l'agrandit.
 
 ## Installation
 

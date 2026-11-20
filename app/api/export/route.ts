@@ -6,6 +6,7 @@ import { supabaseServer } from "@/lib/supabase";
 import { lireReglages, type ScanAvecVisite } from "@/lib/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const DOLLARS = '#,##0.00 "$"';
 
@@ -286,6 +287,100 @@ export async function GET(req: Request) {
     });
   });
   entete(ws);
+
+  // --- Onglet Produits : photo, description, prix, et la bannière où le produit est moins cher ---
+  const pr = wb.addWorksheet("Produits");
+  pr.columns = [
+    { header: "Photo", key: "photo", width: 12 },
+    { header: "Produit", key: "produit", width: 34 },
+    { header: "Marque", key: "marque", width: 16 },
+    { header: "Format", key: "format", width: 12 },
+    { header: "Catégorie", key: "categorie", width: 22 },
+    { header: "CUP", key: "cup", width: 16 },
+    { header: "Bannière", key: "banniere", width: 14 },
+    { header: "Date du relevé", key: "date", width: 13 },
+    { header: "Prix", key: "prix", width: 10, style: { numFmt: DOLLARS } },
+    { header: "Prix régulier", key: "regulier", width: 12, style: { numFmt: DOLLARS } },
+    { header: "En promo", key: "promo", width: 9 },
+    { header: "Moins cher chez", key: "moinsCher", width: 18 },
+    { header: "Prix le plus bas ailleurs", key: "prixBas", width: 14, style: { numFmt: DOLLARS } },
+    { header: "Écart ($)", key: "ecart", width: 10, style: { numFmt: DOLLARS } },
+    { header: "Écart (%)", key: "ecartPct", width: 10, style: { numFmt: "0.0 %" } },
+    { header: "Source du prix le plus bas", key: "source", width: 24 },
+    { header: "Prix dans les autres bannières", key: "autres", width: 46 },
+  ];
+  const cleProduit = (nom: string | null, marque: string | null, format: string | null) => [nom, marque, format].map((t) => normaliser(t ?? "")).join("|");
+  const promosParProduit = new Map<string, NonNullable<typeof promos>>();
+  for (const p of promos ?? []) {
+    // Seules les offres au même format se comparent au prix affiché ; les promos terminées sont ignorées.
+    if (p.verdict !== "identique" || (p.fin && Date.parse(p.fin) < Date.now())) continue;
+    const k = cleProduit(p.produit, p.marque, p.format);
+    promosParProduit.set(k, [...(promosParProduit.get(k) ?? []), p]);
+  }
+  const aImager: { rangee: number; image: string | null; carte: string | null }[] = [];
+  for (const l of comparer(grouper(tout))) {
+    const g = l.groupe;
+    const base = visiteId ? g.observations.find((o) => o.visite_id === visiteId) : g.observations[0];
+    const prix = base ? prixEffectif(base) : null;
+    if (!base || prix === null) continue;
+    const ici = normaliser(base.visites?.banniere ?? "");
+    const ailleurs = [
+      ...l.parBanniere.filter((b) => normaliser(b.banniere) !== ici).map((b) => ({ banniere: b.banniere, prix: b.prix, source: `Relevé du ${b.obs.visites?.date_visite ?? ""}` })),
+      ...(promosParProduit.get(cleProduit(g.nom, g.marque, g.format)) ?? []).filter((p) => normaliser(p.banniere) !== ici)
+        .map((p) => ({ banniere: p.banniere as string, prix: Number(p.prix), source: `Circulaire${p.fin ? ` jusqu'au ${String(p.fin).slice(0, 10)}` : ""}` })),
+    ].sort((a, b) => a.prix - b.prix);
+    const bas = ailleurs[0];
+    const moins = bas && bas.prix < prix - 0.005;
+    const rangee = pr.addRow({
+      produit: g.nom, marque: g.marque, format: g.format, categorie: g.categorie, cup: g.cup,
+      banniere: base.visites?.banniere ?? null, date: base.visites?.date_visite ?? null,
+      prix, regulier: base.prix_regulier === null ? null : Number(base.prix_regulier), promo: base.prix_promo !== null ? "Oui" : "Non",
+      moinsCher: !bas ? "Aucun autre prix" : moins ? bas.banniere : "Nulle part",
+      prixBas: bas ? bas.prix : null,
+      ecart: bas ? bas.prix - prix : null,
+      ecartPct: bas ? (bas.prix - prix) / prix : null,
+      source: bas ? bas.source : null,
+      autres: ailleurs.map((a) => `${a.banniere} ${a.prix.toFixed(2).replace(".", ",")} $`).join(" · "),
+    });
+    rangee.height = 60;
+    rangee.alignment = { vertical: "middle", wrapText: true };
+    if (moins) rangee.getCell("moinsCher").font = { bold: true, color: { argb: "FFB91C1C" } };
+    aImager.push({ rangee: rangee.number, image: g.observations.find((o) => o.image_produit)?.image_produit ?? null, carte: base.photo_path });
+  }
+  entete(pr);
+
+  // Photos : l'image du produit quand elle existe, sinon la carte de prix photographiée (réduite).
+  // Le temps est limité : au-delà de 300 produits ou d'une douzaine de secondes, les photos restantes sont laissées vides.
+  const limite = Date.now() + 12000;
+  const sharp = await import("sharp").then((m) => m.default).catch(() => null);
+  const telecharger = async (adresse: string) => {
+    const rep = await fetch(adresse, { signal: AbortSignal.timeout(4000) });
+    if (!rep.ok) throw new Error("image");
+    return Buffer.from(await rep.arrayBuffer());
+  };
+  const imager = async (x: (typeof aImager)[number]) => {
+    if (Date.now() > limite) return;
+    try {
+      let octets: Buffer | null = null;
+      if (x.image) octets = await telecharger(x.image);
+      else if (x.carte && sharp) {
+        const rep = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/photo`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`, "x-jeton": req.headers.get("x-jeton") ?? "" },
+          body: JSON.stringify({ path: x.carte }),
+          signal: AbortSignal.timeout(4000),
+        });
+        const adresse = (await rep.json())?.url;
+        if (typeof adresse === "string") octets = await telecharger(adresse);
+      }
+      if (!octets) return;
+      if (sharp) octets = await sharp(octets).rotate().resize(160, 160, { fit: "contain", background: "#ffffff" }).jpeg({ quality: 78 }).toBuffer();
+      const id = wb.addImage({ buffer: octets as unknown as ExcelJS.Buffer, extension: "jpeg" });
+      pr.addImage(id, { tl: { col: 0.08, row: x.rangee - 1 + 0.06 }, ext: { width: 72, height: 72 } });
+    } catch { /* photo indisponible : la cellule reste vide */ }
+  };
+  const file = aImager.slice(0, 300);
+  for (let i = 0; i < file.length && Date.now() < limite; i += 10) await Promise.all(file.slice(i, i + 10).map(imager));
 
   const buffer = await wb.xlsx.writeBuffer();
   return new NextResponse(buffer as ArrayBuffer, {
