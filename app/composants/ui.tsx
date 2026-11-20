@@ -136,3 +136,4 @@ export const IReglages = () => <Icone d={["M4 7h9", "M17 7h3", "M4 17h3", "M11 1
 export const IAlerte = () => <Icone d={["M12 4l9 15.5H3L12 4z", "M12 10v4.5", "M12 17.2h.01"]} />;
 export const IRestaurer = () => <Icone d={["M4 12a8 8 0 1 0 2.6-5.9", "M4 4.5V9h4.5"]} />;
 export const IChevron = () => <Icone d={["M6 9l6 6 6-6"]} />;
+export const IPlusMenu = () => <Icone d={["M5 12h.01", "M12 12h.01", "M19 12h.01"]} />;

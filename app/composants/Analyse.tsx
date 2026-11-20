@@ -8,9 +8,9 @@ import type { PromoCirculaire, Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
 import Promos from "./Promos";
-import { IComparer, IRecherche, PastilleBanniere, argent, chargerReferences, chargerTout, dateLisible } from "./ui";
+import { IAlerte, IChevron, IComparer, IEtiquette, IJournal, IMagasin, IRecherche, PastilleBanniere, argent, chargerReferences, chargerTout, dateLisible } from "./ui";
 
-export type VueAnalyse = "comparer" | "tableau" | "variations" | "alertes" | "promos" | "reference";
+export type VueAnalyse = "accueil" | "comparer" | "tableau" | "variations" | "alertes" | "promos" | "reference";
 
 const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %`;
 
@@ -104,20 +104,35 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
     compterRefs();
   }
 
-  const puce = (v: VueAnalyse, libelle: string) => <button className={vue === v ? "on" : ""} onClick={() => setVue(v)}>{libelle}</button>;
   const chargement = scans === null && !erreur;
+  const nbAlertes = depassements.length + promos.filter((p) => p.ecart_pct !== null && p.ecart_pct <= -seuil).length;
+  const bannieres = new Set(lignes.flatMap((l) => l.parBanniere.map((b) => b.banniere))).size;
+  const tuiles: { vue: VueAnalyse; titre: string; chiffre: string | number; detail: string; icone: React.ReactNode; alerte?: boolean }[] = [
+    { vue: "comparer", titre: "Comparer", chiffre: lignes.filter((l) => l.parBanniere.length > 1).length, detail: "produits dans 2 bannières ou plus", icone: <IComparer /> },
+    { vue: "alertes", titre: "Alertes", chiffre: nbAlertes, detail: `écarts de ${String(seuil).replace(".", ",")} % ou plus`, icone: <IAlerte />, alerte: nbAlertes > 0 },
+    { vue: "variations", titre: "Variations", chiffre: changements.length, detail: "changements de prix entre deux visites", icone: <IJournal /> },
+    { vue: "promos", titre: "Circulaires", chiffre: promos.length, detail: "promos concurrentes gardées", icone: <IRecherche /> },
+    { vue: "tableau", titre: "Tableau de bord", chiffre: bannieres, detail: `bannière${bannieres > 1 ? "s" : ""} relevée${bannieres > 1 ? "s" : ""}`, icone: <IMagasin /> },
+    { vue: "reference", titre: "Référence", chiffre: nbRefs ?? "…", detail: "prix dans ma liste de référence", icone: <IEtiquette /> },
+  ];
 
   return (
     <main>
       {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
-      <div className="chips">
-        {puce("comparer", "Comparer")}
-        {puce("tableau", "Tableau de bord")}
-        {puce("variations", `Variations${changements.length ? ` (${changements.length})` : ""}`)}
-        {puce("alertes", `Alertes${depassements.length + promos.filter((p) => p.ecart_pct !== null && p.ecart_pct <= -seuil).length ? ` (${depassements.length + promos.filter((p) => p.ecart_pct !== null && p.ecart_pct <= -seuil).length})` : ""}`)}
-        {puce("promos", "Circulaires")}
-        {puce("reference", "Référence")}
-      </div>
+      {vue === "accueil" ? (
+        <div className="tuiles">
+          {tuiles.map((t) => (
+            <button key={t.vue} className={t.alerte ? "alerte" : ""} onClick={() => setVue(t.vue)}>
+              <span className="ic soft">{t.icone}</span>
+              <b>{chargement ? "…" : t.chiffre}</b>
+              <strong>{t.titre}</strong>
+              <small>{t.detail}</small>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button type="button" className="retour" onClick={() => setVue("accueil")}><IChevron /> Analyse · {tuiles.find((t) => t.vue === vue)?.titre}</button>
+      )}
 
       {(vue === "comparer" || vue === "variations" || vue === "alertes") && (
         <div className="search">

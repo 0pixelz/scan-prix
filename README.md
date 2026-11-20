@@ -65,6 +65,11 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   correspondance exacte (marque, nom, format), dans Open Food Facts puis dans les offres de circulaires.
   Toucher la photo l'agrandit.
 
+- **Navigation** : barre du bas Prix, Liste, bouton photo, Analyse et Plus. « Plus » regroupe l'assistant, les
+  visites, les réglages (une page avec un menu par section), la corbeille et l'export complet. L'en-tête montre la
+  visite en cours (toucher pour en changer), une recherche dans toutes les visites et un menu d'export.
+  L'onglet Analyse s'ouvre sur six tuiles avec leur chiffre clé.
+
 ## Installation
 
 1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, définir le code d'accès (commande en

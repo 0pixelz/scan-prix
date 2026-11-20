@@ -9,7 +9,8 @@ import { chercherImage, cleImage, dejaEssaye, noterEssai } from "@/lib/image";
 import { ajouterPhoto, photosEnAttente, retirerPhoto, type PhotoEnAttente } from "@/lib/file";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { REGLAGES_DEFAUT, lireReglages, type Acces, type ListeNom, type ProduitListe, type Reference, type Reglages as TReglages, type Scan, type ScanAvecVisite, type Visite } from "@/lib/types";
-import Reglages from "./composants/Reglages";
+import Reglages, { type Section } from "./composants/Reglages";
+import { ChoixVisite, MenuExport, RechercheGlobale } from "./composants/Menus";
 import { Fantomes, Glissable, Principal } from "./composants/Gestes";
 import Assistant from "./composants/Assistant";
 import Code from "./composants/Code";
@@ -21,11 +22,11 @@ import Liste from "./composants/Liste";
 import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
-  IAssistant, ICamera, IComparer, ICrayon, IReglages, IEtiquette, IExport, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  IAssistant, ICamera, IComparer, ICrayon, IEffacer, IPlusMenu, IReglages, IEtiquette, IExport, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
   PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
-type Onglet = "scan" | "liste" | "comparer" | "assistant" | "visites";
+type Onglet = "scan" | "liste" | "comparer" | "plus" | "assistant" | "visites" | "reglages";
 type Filtre = "tous" | "promos" | "verifier" | "doublons";
 
 export default function Page() {
@@ -86,7 +87,7 @@ function App({ refuse }: { refuse: () => void }) {
   const [horsLigne, setHorsLigne] = useState(false);
   const [importer, setImporter] = useState(false);
   const [revision, setRevision] = useState(false);
-  const [vueAnalyse, setVueAnalyse] = useState<VueAnalyse>("comparer");
+  const [vueAnalyse, setVueAnalyse] = useState<VueAnalyse>("accueil");
   const [refs, setRefs] = useState<Map<string, Reference>>(new Map());
   const [nbVariations, setNbVariations] = useState(0);
   const [erreur, setErreur] = useState("");
@@ -107,7 +108,8 @@ function App({ refuse }: { refuse: () => void }) {
   const reglagesRef = useRef(reglages);
   reglagesRef.current = reglages;
   const [acces, setAcces] = useState<Acces | null>(null);
-  const [ouvrirReglages, setOuvrirReglages] = useState<null | "apparence" | "filigrane" | "corbeille">(null);
+  const [ouvrirReglages, setOuvrirReglages] = useState<Section | null>(null);
+  const [menu, setMenu] = useState<null | "visite" | "export" | "recherche">(null); // fenêtres ouvertes depuis l'en-tête
   const [annulable, setAnnulable] = useState<{ objetId: string; texte: string } | null>(null);
   const [tout, setTout] = useState<ScanAvecVisite[] | null>(null); // tous les prix, pour la recherche dans les autres visites
   const [version, setVersion] = useState(0); // augmente quand les données changent ailleurs que dans la visite en cours
@@ -601,7 +603,9 @@ function App({ refuse }: { refuse: () => void }) {
       </Glissable>
     );
   };
-  const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Analyse", assistant: "Assistant", visites: "Visites" };
+  const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Analyse", plus: "Plus", assistant: "Assistant", visites: "Visites", reglages: "Réglages" };
+  const sousPage = onglet === "assistant" || onglet === "visites" || onglet === "reglages"; // pages ouvertes depuis « Plus »
+  const allerReglages = (section: Section | null) => { setOuvrirReglages(section); setOnglet("reglages"); };
   const aVerifier = scans.filter((s) => s.confiance && s.confiance !== "haute");
   const puce = (f: Filtre, libelle: string, n: number) => (
     <button className={filtre === f ? "on" : ""} onClick={() => setFiltre(f)}>{libelle} ({n})</button>
@@ -610,20 +614,23 @@ function App({ refuse }: { refuse: () => void }) {
   return (
     <div className="app">
       <header>
-        <h1>{titres[onglet]}</h1>
+        <span className="row titre">
+          {sousPage && <button className="small rond" aria-label="Retour à Plus" onClick={() => setOnglet("plus")}><IChevron /></button>}
+          <h1>{titres[onglet]}</h1>
+        </span>
         <span className="row">
-          {onglet === "scan" && visite && (
-            <>
-              <button className="small" disabled={rapportEnCours || !scans.length} onClick={() => rapport(visite)}>
-                <IJournal /> {rapportEnCours ? "…" : "PDF"}
-              </button>
-              <button className="small" disabled={exportEnCours || !scans.length} onClick={() => exporter(visite)}>
-                <IExport /> Excel
-              </button>
-            </>
+          {!sousPage && onglet !== "plus" && visites.length > 0 && (
+            <button className="puce-visite" aria-label="Changer de visite" onClick={() => setMenu("visite")}>
+              {visite && <PastilleBanniere banniere={visite.banniere} doux />}
+              <span>{visite ? visite.magasin || visite.banniere : "Visite"}</span>
+              <IChevron />
+            </button>
           )}
           {onglet === "visites" && !lecture && <button className="small" onClick={() => setNouvelle(true)}><IPlus /> Nouvelle</button>}
-          <button className="small rond" aria-label="Réglages" onClick={() => setOuvrirReglages("apparence")}><IReglages /></button>
+          {!sousPage && <button className="small rond" aria-label="Rechercher partout" onClick={() => setMenu("recherche")}><IRecherche /></button>}
+          {(onglet === "scan" || onglet === "comparer") && (
+            <button className="small rond" aria-label="Exporter" disabled={exportEnCours || rapportEnCours} onClick={() => setMenu("export")}><IExport /></button>
+          )}
         </span>
       </header>
 
@@ -650,7 +657,6 @@ function App({ refuse }: { refuse: () => void }) {
               )}
             </div>
             {visite && !lecture && <button className="ghost icone" aria-label="Modifier la visite" onClick={() => setModifVisite(visite)}><ICrayon /></button>}
-            <button className="ghost icone" aria-label="Toutes les visites" onClick={() => setOnglet("visites")}><IMagasin /></button>
           </div>
 
           {visite && (
@@ -827,12 +833,61 @@ function App({ refuse }: { refuse: () => void }) {
               </div>
             ))}
           </div>
-          <button className="full" disabled={exportEnCours || !visites.length} onClick={() => exporter(null)}>
-            <IExport /> Exporter toutes les visites
-          </button>
-          <button className="full" style={{ marginTop: 10 }} onClick={() => setOuvrirReglages("corbeille")}>Corbeille</button>
-          <button className="full ghost" style={{ marginTop: 10 }} onClick={refuse}>Verrouiller l'app</button>
         </Principal>
+      )}
+
+      {onglet === "plus" && (
+        <main>
+          {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
+          <div className="card menu">
+            {([
+              { cle: "assistant", icone: <IAssistant />, titre: "Assistant", detail: "Pose une question sur tes prix ou fais ajouter un relevé", action: () => setOnglet("assistant") },
+              { cle: "visites", icone: <IMagasin />, titre: "Visites", detail: `${visites.length} visite${visites.length > 1 ? "s" : ""}${visite ? ` · en cours : ${[visite.banniere, visite.magasin].filter(Boolean).join(" · ")}` : ""}`, action: () => setOnglet("visites") },
+              { cle: "reglages", icone: <IReglages />, titre: "Réglages", detail: "Apparence, signature des photos, circulaires, accès collègue", action: () => allerReglages(null) },
+              { cle: "corbeille", icone: <IEffacer />, titre: "Corbeille", detail: "Prix et visites supprimés, récupérables 30 jours", action: () => allerReglages("corbeille") },
+              { cle: "export", icone: <IExport />, titre: "Exporter toutes les visites", detail: exportEnCours ? "Préparation du fichier…" : "Un fichier Excel avec tous tes relevés", action: () => !exportEnCours && exporter(null) },
+            ]).map((l) => (
+              <div key={l.cle} className="tx" role="button" onClick={l.action}>
+                <div className="ic soft">{l.icone}</div>
+                <div className="mid"><div className="t">{l.titre}</div><div className="s">{l.detail}</div></div>
+                <span className="suite"><IChevron /></span>
+              </div>
+            ))}
+          </div>
+          <button className="full ghost" onClick={refuse}>Verrouiller l'app</button>
+        </main>
+      )}
+
+      {onglet === "reglages" && (
+        <Reglages
+          key={ouvrirReglages ?? "menu"}
+          reglages={reglages}
+          enregistrer={enregistrerReglages}
+          acces={acces}
+          rechargerAcces={chargerAcces}
+          visite={visite}
+          sectionInitiale={ouvrirReglages}
+          apparence={apparence}
+          changerApparence={(a) => { setApparence(a); appliquerApparence(a); }}
+          restaure={apresRestauration}
+          verrouiller={refuse}
+        />
+      )}
+
+      {menu === "visite" && (
+        <ChoixVisite visites={visites} courante={visite} lecture={lecture} fermer={() => setMenu(null)}
+          choisir={(v) => { setVisite(v); setMenu(null); }}
+          nouvelle={() => { setMenu(null); setNouvelle(true); }}
+          gerer={() => { setMenu(null); setOnglet("visites"); }} />
+      )}
+      {menu === "export" && (
+        <MenuExport visite={visite} vide={!scans.length} fermer={() => setMenu(null)}
+          pdf={() => visite && rapport(visite)} excel={() => visite && exporter(visite)} tout={() => exporter(null)} />
+      )}
+      {menu === "recherche" && (
+        <RechercheGlobale listes={listes} fermer={() => setMenu(null)}
+          ouvrirProduit={(g) => { setMenu(null); setHistorique(g); }}
+          ouvrirListe={(id) => { setMenu(null); setListeId(id); setOnglet("liste"); }} />
       )}
 
       {annulable && (
@@ -853,8 +908,8 @@ function App({ refuse }: { refuse: () => void }) {
         <button className={onglet === "scan" ? "on" : ""} onClick={() => setOnglet("scan")}><IEtiquette />Prix</button>
         <button className={onglet === "liste" ? "on" : ""} onClick={() => setOnglet("liste")}><IListe />Liste</button>
         <button className="capture" aria-label="Photographier" disabled={lecture} onClick={ouvrirScanner}><span><ICamera /></span></button>
-        <button className={onglet === "comparer" ? "on" : ""} onClick={() => { setVueAnalyse("comparer"); setOnglet("comparer"); }}><IComparer />Analyse</button>
-        <button className={onglet === "assistant" ? "on" : ""} onClick={() => setOnglet("assistant")}><IAssistant />Assistant</button>
+        <button className={onglet === "comparer" ? "on" : ""} onClick={() => { setVueAnalyse("accueil"); setVersion((n) => n + (onglet === "comparer" ? 1 : 0)); setOnglet("comparer"); }}><IComparer />Analyse</button>
+        <button className={onglet === "plus" || sousPage ? "on" : ""} onClick={() => setOnglet("plus")}><IPlusMenu />Plus</button>
       </nav>
 
       {nouvelle && (
@@ -935,22 +990,6 @@ function App({ refuse }: { refuse: () => void }) {
       {rafale && <Rafale fermer={() => setRafale(false)} photo={photographier} enCours={enCours} />}
 
       {historique && <Historique groupe={historique} fermer={() => setHistorique(null)} lecture={lecture} modifie={() => { setVersion((n) => n + 1); chargerScans(); }} />}
-
-      {ouvrirReglages && (
-        <Reglages
-          reglages={reglages}
-          enregistrer={enregistrerReglages}
-          acces={acces}
-          rechargerAcces={chargerAcces}
-          visite={visite}
-          sectionInitiale={ouvrirReglages}
-          apparence={apparence}
-          changerApparence={(a) => { setApparence(a); appliquerApparence(a); }}
-          fermer={() => setOuvrirReglages(null)}
-          restaure={apresRestauration}
-          verrouiller={refuse}
-        />
-      )}
     </div>
   );
 }

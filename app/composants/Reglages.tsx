@@ -5,9 +5,13 @@ import { supabaseBrowser } from "@/lib/supabase";
 import { lignesFiligrane } from "@/lib/filigrane";
 import type { Acces, Reglages as TReglages, Visite } from "@/lib/types";
 import type { Apparence } from "@/lib/apparence";
-import { IEffacer, IEtiquette, IMagasin, IRestaurer, argent, dateLisible, momentLisible } from "./ui";
+import { IAlerte, IAssistant, ICamera, IChevron, ICoche, IEffacer, IEtiquette, IMagasin, IReglages, IRestaurer, argent, dateLisible, momentLisible } from "./ui";
 
-type Section = "apparence" | "filigrane" | "cout" | "acces" | "corbeille";
+export type Section = "apparence" | "filigrane" | "circulaires" | "cout" | "acces" | "corbeille";
+const TITRES: Record<Section, string> = {
+  apparence: "Apparence", filigrane: "Signature des photos", circulaires: "Circulaires et alertes",
+  cout: "Coût Claude", acces: "Accès collègue", corbeille: "Corbeille",
+};
 type Jete = { id: string; type: "visites" | "scans"; objet_id: string; donnees: Record<string, unknown>; lot: number; supprime_le: string };
 type Usage = { quand: string; fonction: string; modele: string; entree: number; sortie: number; photos: number };
 
@@ -15,7 +19,7 @@ const nombre = (v: number) => v.toLocaleString("fr-CA");
 const usd = (v: number) => `${v.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $ US`;
 
 /** Réglages : signature des photos, coût Claude, accès d'un collègue et corbeille. */
-export default function Reglages({ apparence, changerApparence, reglages, enregistrer, acces, rechargerAcces, visite, fermer, restaure, verrouiller, sectionInitiale }: {
+export default function Reglages({ apparence, changerApparence, reglages, enregistrer, acces, rechargerAcces, visite, restaure, verrouiller, sectionInitiale }: {
   apparence: Apparence;
   changerApparence: (a: Apparence) => void;
   reglages: TReglages;
@@ -23,14 +27,13 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
   acces: Acces | null;
   rechargerAcces: () => void;
   visite: Visite | null;
-  fermer: () => void;
   restaure: () => void;
   verrouiller: () => void;
-  sectionInitiale?: Section;
+  sectionInitiale?: Section | null;
 }) {
   const sb = supabaseBrowser();
   const lecture = acces?.role === "lecture";
-  const [section, setSection] = useState<Section>(sectionInitiale ?? "apparence");
+  const [section, setSection] = useState<Section | null>(sectionInitiale ?? null);
   const [f, setF] = useState(reglages.filigrane);
   const [tarifs, setTarifs] = useState(() => Object.fromEntries(Object.entries(reglages.tarifs).map(([k, v]) => [k, String(v).replace(".", ",")])) as Record<keyof TReglages["tarifs"], string>);
   const [message, setMessage] = useState("");
@@ -153,25 +156,48 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
   const avecVisite = (j: Jete) => visitesJetees.some((v) => v.lot === j.lot && v.objet_id === j.donnees.visite_id);
   const affiches = (jetes ?? []).filter((j) => j.type === "visites" || !avecVisite(j));
 
-  const puce = (s: Section, libelle: string) => <button className={section === s ? "on" : ""} onClick={() => setSection(s)}>{libelle}</button>;
   const lieu = visite ? [visite.banniere, visite.magasin].filter(Boolean).join(" · ") : "Bannière · magasin de la visite";
   const apercu = lignesFiligrane(f, new Date().toISOString(), lieu);
 
+  // Nombre d'éléments dans la corbeille, pour le menu
+  const [nbCorbeille, setNbCorbeille] = useState<number | null>(null);
+  useEffect(() => {
+    if (section !== null) return;
+    sb.from("corbeille").select("id", { count: "exact", head: true }).then(({ count }) => setNbCorbeille(count ?? 0));
+  }, [sb, section]);
+
+  // Circulaires et alertes : code postal et seuil
+  const [codePostal, setCodePostal] = useState(reglages.codePostal);
+  const [seuil, setSeuil] = useState(String(reglages.seuil).replace(".", ","));
+
+  const themes = { auto: "automatique", clair: "clair", sombre: "sombre" } as const;
+  const textes = { normal: "texte normal", grand: "grand texte", tresgrand: "très grand texte" } as const;
+  const menu: { section: Section; icone: React.ReactNode; etat: string }[] = [
+    { section: "apparence", icone: <IReglages />, etat: `Thème ${themes[apparence.theme]} · ${textes[apparence.texte]}` },
+    { section: "filigrane", icone: <ICamera />, etat: reglages.filigrane.actif ? `Activée${reglages.filigrane.nom ? ` · ${reglages.filigrane.nom}` : ""}` : "Désactivée" },
+    { section: "circulaires", icone: <IAlerte />, etat: `${reglages.codePostal ? `Code postal ${reglages.codePostal}` : "Code postal à entrer"} · seuil ${String(reglages.seuil).replace(".", ",")} %` },
+    { section: "cout", icone: <IAssistant />, etat: "Photos lues et coût estimé du mois" },
+    { section: "acces", icone: <ICoche />, etat: !acces ? "…" : !acces.proprietaire ? (lecture ? "Tu es en lecture seule" : "Tu utilises un code collègue") : acces.collegue ? `Code actif · ${acces.collegue.role === "lecture" ? "lecture seule" : "accès complet"}` : "Aucun code collègue" },
+    { section: "corbeille", icone: <IEffacer />, etat: nbCorbeille === null ? "…" : nbCorbeille ? `${nbCorbeille} élément${nbCorbeille > 1 ? "s" : ""} récupérable${nbCorbeille > 1 ? "s" : ""}` : "Vide" },
+  ];
+
   return (
-    <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer()}>
-      <div className="panel reglages">
-        <div className="grip" />
-        <div className="row between">
-          <h3>Réglages</h3>
-          <button type="button" className="ghost" onClick={fermer}>Fermer</button>
+    <main className="reglages">
+      {section === null ? (
+        <div className="card menu">
+          {menu.map((m) => (
+            <div key={m.section} className="tx" role="button" onClick={() => setSection(m.section)}>
+              <div className="ic soft">{m.icone}</div>
+              <div className="mid"><div className="t">{TITRES[m.section]}</div><div className="s">{m.etat}</div></div>
+              <span className="suite"><IChevron /></span>
+            </div>
+          ))}
         </div>
-        <div className="chips" style={{ marginTop: 10 }}>
-          {puce("apparence", "Apparence")}
-          {puce("filigrane", "Signature des photos")}
-          {puce("cout", "Coût Claude")}
-          {puce("acces", "Accès collègue")}
-          {puce("corbeille", "Corbeille")}
-        </div>
+      ) : (
+        <button type="button" className="retour" onClick={() => setSection(null)}><IChevron /> Tous les réglages</button>
+      )}
+      <div className={section === null ? "" : "card"}>
+        {section !== null && <h2>{TITRES[section]}</h2>}
         {message && <div className="alert info">{message}</div>}
         {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
 
@@ -199,6 +225,22 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
             </div>
             <div className="muted">Ces deux choix sont gardés sur cet appareil seulement.</div>
           </>
+        )}
+
+        {section === "circulaires" && (
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const v = parseFloat(seuil.replace(",", "."));
+            sauver({ ...reglages, codePostal: codePostal.trim().toUpperCase(), seuil: Number.isFinite(v) && v > 0 ? Math.round(v * 10) / 10 : reglages.seuil }, "Enregistré.");
+          }}>
+            <label>Code postal (région des circulaires)</label>
+            <input value={codePostal} disabled={lecture} onChange={(e) => setCodePostal(e.target.value.toUpperCase())} placeholder="Ex. H2X 1Y4" maxLength={7} autoCapitalize="characters" />
+            <div className="muted">Sert à chercher les promos des concurrents et les photos de produits dans les circulaires de ta région.</div>
+            <label>Seuil d'alerte (%)</label>
+            <input value={seuil} inputMode="decimal" disabled={lecture} onChange={(e) => setSeuil(e.target.value)} />
+            <div className="muted">Un écart de prix égal ou supérieur à ce pourcentage est signalé dans Alertes, l'Excel et le rapport.</div>
+            {!lecture && <div className="actions"><button className="primary full">Enregistrer</button></div>}
+          </form>
         )}
 
         {section === "filigrane" && (
@@ -344,6 +386,6 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }
