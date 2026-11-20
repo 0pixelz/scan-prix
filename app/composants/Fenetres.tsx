@@ -6,6 +6,7 @@ import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type G
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
+import { imageProduit } from "@/lib/image";
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
@@ -263,6 +264,15 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   }
 
   if (lecteur) return <ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setF((v) => ({ ...v, cup: code })); setLecteur(false); }} />;
+  // Photo du vrai produit : celle déjà trouvée, sinon cherchée par le code-barres
+  const [imageP, setImageP] = useState<string | null>(scan.image_produit ?? null);
+  useEffect(() => {
+    if (scan.image_produit || !scan.cup) return;
+    let annule = false;
+    imageProduit(scan.cup).then((url) => { if (!annule && url) setImageP(url); });
+    return () => { annule = true; };
+  }, [scan.image_produit, scan.cup]);
+
   if (agrandie && photo) return <Visionneuse src={photo} fermer={() => setAgrandie(false)} />;
 
   return (
@@ -273,6 +283,16 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
           <h3>Modifier le prix</h3>
           <button type="button" className="ghost" onClick={fermer}>Fermer</button>
         </div>
+        {imageP && (
+          <div className="entete-produit">
+            <img src={imageP.replace(/\.200\.jpg$/, ".400.jpg")} alt={`Photo du produit ${scan.produit ?? ""}`} onError={() => setImageP(null)} />
+            <div>
+              <b>{scan.produit || "Produit non lu"}</b>
+              <span>{[scan.marque, scan.format].filter(Boolean).join(" · ")}</span>
+              <small>Image : Open Food Facts</small>
+            </div>
+          </div>
+        )}
         {(unite || reference) && (
           <div className="resume">
             {unite && <div><span>Prix par unité</span><b>{texteUnite(unite)}</b></div>}

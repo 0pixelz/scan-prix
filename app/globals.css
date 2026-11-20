@@ -537,3 +537,10 @@ header button.small.rond { padding: 0; width: 38px; min-width: 38px; justify-con
 /* ---------- Photo du vrai produit à la place de l'icône ---------- */
 .ic.produit { background: #fff; border: 1px solid var(--line); overflow: hidden; padding: 2px; }
 .ic.produit img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.entete-produit { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding: 10px; border-radius: 14px; background: var(--bg); }
+.entete-produit img { width: 96px; height: 96px; flex: none; object-fit: contain; border-radius: 10px; background: #fff; }
+.entete-produit div { min-width: 0; }
+.entete-produit b, .entete-produit span, .entete-produit small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.entete-produit b { font-size: 16px; }
+.entete-produit span { color: var(--muted); font-size: 14px; }
+.entete-produit small { color: var(--muted); font-size: 11px; margin-top: 6px; }
