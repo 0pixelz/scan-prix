@@ -113,6 +113,7 @@ function App({ refuse }: { refuse: () => void }) {
   const [rapportEnCours, setRapportEnCours] = useState(false);
   const lecture = acces?.role === "lecture";
   const [apparence, setApparence] = useState<Apparence>(lireApparence);
+  const [secours, setSecours] = useState(false); // dernière photo lue par le service de secours
   const [chargement, setChargement] = useState(true); // premier chargement des prix de la visite
   const [comparaison, setComparaison] = useState<LigneComparaison[]>([]);
   const [replies, setReplies] = useState<Set<string>>(new Set()); // catégories repliées
@@ -295,6 +296,7 @@ function App({ refuse }: { refuse: () => void }) {
         if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
         else {
           if (visiteRef.current?.id === p.visiteId) setScans((s) => [...(json.scans as Scan[]), ...s]);
+          setSecours(json.secours === true);
           // Retour immédiat : vignette de la photo avec le prix lu, et vibration si l'appareil le permet
           const lu = (json.scans as Scan[])[0];
           const n = json.scans.length;
@@ -652,6 +654,7 @@ function App({ refuse }: { refuse: () => void }) {
                   {enAttente > 0 && navigator.onLine && <button className="small" onClick={() => traiterFile()}>Réessayer</button>}
                 </div>
               )}
+              {secours && <div className="alert avis" onClick={() => setSecours(false)}><span>Claude n'est pas disponible (crédits ou panne) : les photos sont lues par le service de secours. Vérifie les lectures de plus près.</span></div>}
               {enCours > 0 && <div className="alert info">Lecture de {enCours} photo{enCours > 1 ? "s" : ""} en cours…</div>}
 
               {enDouble.size > 0 && (

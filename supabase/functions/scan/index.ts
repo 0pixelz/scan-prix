@@ -1,4 +1,6 @@
 // Fonction Edge : lit une photo de cartes de prix avec Claude Vision et enregistre les prix.
+// Si Claude ne répond pas (crédits épuisés, panne), la photo est lue par un service de secours (Gemini)
+// quand sa clé est enregistrée.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
@@ -6,6 +8,8 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-jeton",
 };
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5";
+// Modèles du service de secours, essayés dans l'ordre (le suivant sert si le premier est refusé ou saturé).
+const MODELES_SECOURS = (Deno.env.get("GEMINI_MODELS") || "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite").split(",").map((m) => m.trim()).filter(Boolean);
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 
 const INTRO_CARTE = `Tu lis des photos de cartes de prix (étiquettes de tablette) prises en magasin au Québec.
@@ -33,9 +37,14 @@ const REGLES = `Règles :
 - confiance : « haute », « moyenne » ou « basse » selon la lisibilité.
 - categorie : une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre.
 - icone : le type de produit, une seule valeur parmi : pain, viennoiserie, craquelin, biscuit, cereales, pates_riz, farine_sucre, lait, yogourt, fromage, beurre, oeufs, viande, volaille, charcuterie, poisson, fruits_de_mer, fruits, legumes, salade, conserve, soupe, sauce_condiment, huile, epices, tartinade, cafe, the, jus, boisson_gazeuse, eau, biere, vin, croustilles, noix, bonbon, chocolat, dessert, creme_glacee, surgele, pizza, repas_prepare, bebe, animaux, nettoyage, lessive, papier, hygiene, sante, autre.
-- cle_produit : identifiant normalisé pour reconnaître le même produit d'un magasin à l'autre : marque, nom générique et format, en minuscules sans accents (ex. « lactantia beurre sale 454 g »).
-Réponds toujours en appelant l'outil enregistrer_cartes, une seule fois, avec toutes les cartes lues.
+- cle_produit : identifiant normalisé pour reconnaître le même produit d'un magasin à l'autre : marque, nom générique et format, en minuscules sans accents (ex. « lactantia beurre sale 454 g »).`;
+
+const FIN_CLAUDE = `Réponds toujours en appelant l'outil enregistrer_cartes, une seule fois, avec toutes les cartes lues.
 Si rien n'est lisible, appelle-le avec une liste vide.`;
+
+const FIN_SECOURS = `Réponds uniquement avec un objet JSON de la forme {"cartes": [ ... ]}, une entrée par carte lue, avec exactement ces champs :
+produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, prix_membre, points, points_details, cup, code_article, prix_unitaire, categorie, icone, cle_produit, confiance.
+Si rien n'est lisible, réponds {"cartes": []}.`;
 
 const texte = { type: ["string", "null"] };
 const nombre = { type: ["number", "null"] };
@@ -71,6 +80,71 @@ const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
 const date = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
 
+type Lecture = { cartes: Record<string, unknown>[]; modele: string; entree: number; sortie: number };
+const consigne = (circulaire: boolean) =>
+  `Date du jour : ${new Date().toISOString().slice(0, 10)}. ${circulaire ? "Extrais toutes les offres de cette page de circulaire." : "Extrais les cartes de prix."}`;
+
+async function lireClaude(cle: string, base64: string, circulaire: boolean): Promise<Lecture> {
+  const rep = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": cle, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: circulaire ? 8000 : 2000,
+      system: `${circulaire ? INTRO_CIRCULAIRE : INTRO_CARTE}\n${REGLES}\n${FIN_CLAUDE}`,
+      tools: [OUTIL],
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
+          { type: "text", text: consigne(circulaire) },
+        ],
+      }],
+    }),
+  });
+  const msg = await rep.json();
+  if (!rep.ok) throw new Error(msg?.error?.message ?? `erreur ${rep.status}`);
+  // deno-lint-ignore no-explicit-any
+  const bloc = (msg.content ?? []).find((b: any) => b.type === "tool_use");
+  return {
+    cartes: Array.isArray(bloc?.input?.cartes) ? bloc.input.cartes : [],
+    modele: MODEL, entree: msg.usage?.input_tokens ?? 0, sortie: msg.usage?.output_tokens ?? 0,
+  };
+}
+
+async function lireSecours(cle: string, base64: string, circulaire: boolean): Promise<Lecture> {
+  let derniere = "aucun modèle disponible";
+  for (const modele of MODELES_SECOURS) {
+    const rep = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent`, {
+      method: "POST",
+      headers: { "x-goog-api-key": cle, "content-type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: `${circulaire ? INTRO_CIRCULAIRE : INTRO_CARTE}\n${REGLES}\n${FIN_SECOURS}` }] },
+        contents: [{ role: "user", parts: [{ inlineData: { mimeType: "image/jpeg", data: base64 } }, { text: consigne(circulaire) }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: circulaire ? 8000 : 3000 },
+      }),
+    });
+    const msg = await rep.json().catch(() => ({}));
+    if (!rep.ok) {
+      derniere = msg?.error?.message ?? `erreur ${rep.status}`;
+      continue; // modèle retiré, quota du jour atteint… : on essaie le suivant
+    }
+    // deno-lint-ignore no-explicit-any
+    const texteLu = (msg.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("");
+    let lu: unknown;
+    try {
+      lu = JSON.parse(texteLu.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+    } catch {
+      derniere = "réponse illisible";
+      continue;
+    }
+    // deno-lint-ignore no-explicit-any
+    const cartes = Array.isArray(lu) ? lu : Array.isArray((lu as any)?.cartes) ? (lu as any).cartes : [];
+    return { cartes, modele, entree: msg.usageMetadata?.promptTokenCount ?? 0, sortie: msg.usageMetadata?.candidatesTokenCount ?? 0 };
+  }
+  throw new Error(derniere);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -86,38 +160,36 @@ Deno.serve(async (req) => {
     const { data: visite } = await sb.from("visites").select("id").eq("id", visiteId).maybeSingle();
     if (!visite) return json({ error: "Visite introuvable." });
 
-    const { data: cle } = await sb.rpc("lire_cle_claude");
-    if (!cle) return json({ error: "La clé API Claude n'est pas encore enregistrée." });
-
     const base64 = String(image).replace(/^data:image\/\w+;base64,/, "");
-    const rep = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": cle, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: circulaire ? 8000 : 2000,
-        system: `${circulaire ? INTRO_CIRCULAIRE : INTRO_CARTE}\n${REGLES}`,
-        tools: [OUTIL],
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-            { type: "text", text: `Date du jour : ${new Date().toISOString().slice(0, 10)}. ${circulaire ? "Extrais toutes les offres de cette page de circulaire." : "Extrais les cartes de prix."}` },
-          ],
-        }],
-      }),
-    });
-    const msg = await rep.json();
-    if (!rep.ok) return json({ error: `Lecture de la photo impossible : ${msg?.error?.message ?? rep.status}` });
-    // Suivi de l'utilisation (jetons facturés par Claude)
-    await sb.from("usage_claude").insert({
-      fonction: circulaire ? "circulaire" : "scan", modele: MODEL, photos: 1,
-      entree: msg.usage?.input_tokens ?? 0, sortie: msg.usage?.output_tokens ?? 0,
-    });
 
-    // deno-lint-ignore no-explicit-any
-    const bloc = (msg.content ?? []).find((b: any) => b.type === "tool_use");
-    const cartes: Record<string, unknown>[] = Array.isArray(bloc?.input?.cartes) ? bloc.input.cartes : [];
+    // Lecture par Claude ; si elle échoue, par le service de secours quand sa clé existe.
+    let lecture: Lecture | null = null;
+    let panne = "";
+    let secours = false;
+    const { data: cle } = await sb.rpc("lire_cle_claude");
+    if (!cle) panne = "La clé API Claude n'est pas encore enregistrée.";
+    else {
+      try {
+        lecture = await lireClaude(cle, base64, circulaire);
+      } catch (e) {
+        panne = e instanceof Error ? e.message : "erreur inconnue";
+      }
+    }
+    if (!lecture) {
+      const { data: cleSecours } = await sb.rpc("lire_cle_secours");
+      if (!cleSecours) return json({ error: `Lecture de la photo impossible : ${panne}` });
+      try {
+        lecture = await lireSecours(cleSecours, base64, circulaire);
+        secours = true;
+      } catch (e) {
+        return json({ error: `Lecture de la photo impossible. Claude : ${panne} Secours : ${e instanceof Error ? e.message : "erreur inconnue"}` });
+      }
+    }
+    // Suivi de l'utilisation (jetons comptés par le service qui a lu la photo)
+    await sb.from("usage_claude").insert({
+      fonction: circulaire ? "circulaire" : "scan", modele: lecture.modele, photos: 1, entree: lecture.entree, sortie: lecture.sortie,
+    });
+    const cartes = lecture.cartes.filter((c) => c && typeof c === "object");
     if (!cartes.length) return json({ scans: [], message: circulaire ? "Aucune offre lisible sur cette page." : "Aucune carte de prix lisible sur cette photo." });
 
     // Photo conservée pour pouvoir vérifier une lecture douteuse (non bloquant si l'envoi échoue).
@@ -136,11 +208,11 @@ Deno.serve(async (req) => {
       cup: str(c.cup)?.replace(/\D/g, "") || null,
       code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire),
       categorie: str(c.categorie), icone: str(c.icone)?.toLowerCase() ?? null, cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,
-      confiance: str(c.confiance), photo_path: photoPath, photo_prise_le: prise, source: circulaire ? "circulaire" : null,
+      confiance: ["haute", "moyenne", "basse"].includes(String(c.confiance)) ? String(c.confiance) : "moyenne", photo_path: photoPath, photo_prise_le: prise, source: circulaire ? "circulaire" : null,
     }));
     const { data, error } = await sb.from("scans").insert(lignes).select();
     if (error) return json({ error: error.message });
-    return json({ scans: data });
+    return json({ scans: data, secours });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "Erreur inconnue" });
   }

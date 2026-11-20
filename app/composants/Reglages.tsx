@@ -68,6 +68,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
     return Number.isFinite(v) && v >= 0 ? v : reglages.tarifs[k];
   };
   const cout = (u: Usage) => {
+    if (/gemini/i.test(u.modele)) return 0; // service de secours gratuit
     const sonnet = !/haiku/i.test(u.modele);
     return (u.entree / 1e6) * t(sonnet ? "sonnetEntree" : "haikuEntree") + (u.sortie / 1e6) * t(sonnet ? "sonnetSortie" : "haikuSortie");
   };
@@ -81,6 +82,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
     return {
       nom: d.toLocaleDateString("fr-CA", { month: "long", year: "numeric" }),
       photos: lectures.reduce((s, u) => s + (u.photos || 0), 0),
+      secours: lectures.filter((u) => /gemini/i.test(u.modele)).reduce((s, u) => s + (u.photos || 0), 0),
       messages: messages.length,
       coutPhotos: lectures.reduce((s, u) => s + cout(u), 0),
       coutMessages: messages.reduce((s, u) => s + cout(u), 0),
@@ -237,6 +239,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
                   <div className="row between"><b style={{ textTransform: "capitalize" }}>{m.nom}</b><b>{usd(m.coutPhotos + m.coutMessages)}</b></div>
                   <div className="tableau">
                     <div><span>Photos lues</span><span>{nombre(m.photos)}</span><span>{usd(m.coutPhotos)}</span></div>
+                    {m.secours > 0 && <div><span>dont lues par le secours</span><span>{nombre(m.secours)}</span><span>gratuit</span></div>}
                     <div><span>Messages à l'assistant</span><span>{nombre(m.messages)}</span><span>{usd(m.coutMessages)}</span></div>
                     <div><span>Jetons utilisés</span><span>{nombre(m.jetons)}</span><span /></div>
                   </div>

@@ -1,0 +1,29 @@
+# Envoie la clé API Gemini (secret GitHub GEMINI_API_KEY) vers Supabase Vault.
+# Elle sert de secours pour lire les photos quand Claude n'est pas disponible.
+# La clé ne passe ni par le code ni par les journaux.
+name: Enregistrer la clé de secours
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Envoyer la clé à Supabase
+        env:
+          CLE: ${{ secrets.GEMINI_API_KEY || secrets.GOOGLE_API_KEY }}
+          SUPABASE_URL: https://vfikxkdadiqkducklewv.supabase.co
+          SUPABASE_KEY: sb_publishable_7ChQQ1PKLuvBgo5qcrvFhg_CKlSwK6t
+        run: |
+          if [ -z "$CLE" ]; then
+            echo "::error::Aucun secret trouvé. Ajoute GEMINI_API_KEY dans Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          jq -n --arg cle "$CLE" '{cle: $cle}' > corps.json
+          code=$(curl -sS -o reponse.txt -w "%{http_code}" -X POST "$SUPABASE_URL/rest/v1/rpc/definir_cle_secours" \
+            -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" --data @corps.json)
+          rm -f corps.json
+          echo "Réponse Supabase : $code"
+          cat reponse.txt
+          [ "$code" = "200" ]

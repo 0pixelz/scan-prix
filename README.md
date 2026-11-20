@@ -49,6 +49,9 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 - **Gestes** : glisser une ligne vers la gauche pour la supprimer (récupérable), vers la droite pour la marquer
   vérifiée ; tirer vers le bas pour actualiser. Le bouton de photo est au centre de la barre du bas.
 
+- **Secours pour la lecture des photos** : si Claude ne répond pas (crédits épuisés, panne), la photo est lue par
+  Gemini quand le secret GitHub `GEMINI_API_KEY` a été envoyé avec le flux « Enregistrer la clé de secours ».
+
 ## Installation
 
 1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, définir le code d'accès (commande en

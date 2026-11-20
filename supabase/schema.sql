@@ -388,3 +388,30 @@ create policy "suppression complet seulement" on public.liste_produits as restri
 create policy "suppression complet seulement" on public.reference_prix as restrictive for delete to anon using ((select public.jeton_ecriture()));
 create policy "suppression complet seulement" on public.listes as restrictive for delete to anon using ((select public.jeton_ecriture()));
 create policy "suppression complet seulement" on public.reglages as restrictive for delete to anon using ((select public.jeton_ecriture()));
+
+-- Clé du service de secours (Gemini), lue par la fonction scan quand Claude n'est pas disponible.
+-- Même principe que la clé Claude : écrite une seule fois par le flux GitHub, lue par service_role seulement.
+create or replace function public.definir_cle_secours(cle text)
+returns text language plpgsql security definer set search_path = '' as $$
+begin
+  if cle is null or cle !~ '^[A-Za-z0-9_-]{20,200}$' then
+    raise exception 'Cle invalide';
+  end if;
+  if exists (select 1 from vault.secrets where name = 'gemini_api_key') then
+    raise exception 'Une cle est deja enregistree';
+  end if;
+  perform vault.create_secret(cle, 'gemini_api_key', 'Cle API Gemini (secours) pour Scan Prix');
+  return 'ok';
+end $$;
+
+create or replace function public.lire_cle_secours()
+returns text language plpgsql security definer set search_path = '' as $$
+declare r text;
+begin
+  if coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '') <> 'service_role' then
+    raise exception 'Acces refuse';
+  end if;
+  select decrypted_secret into r from vault.decrypted_secrets where name = 'gemini_api_key' limit 1;
+  return r;
+end $$;
+revoke execute on function public.lire_cle_secours() from public, anon, authenticated;
