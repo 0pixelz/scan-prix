@@ -135,3 +135,4 @@ export const IEffacer = () => <Icone d={["M5 7h14", "M9 7V4.5h6V7", "M7 7l1 12.5
 export const IReglages = () => <Icone d={["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", "M9 19.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"]} />;
 export const IAlerte = () => <Icone d={["M12 4l9 15.5H3L12 4z", "M12 10v4.5", "M12 17.2h.01"]} />;
 export const IRestaurer = () => <Icone d={["M4 12a8 8 0 1 0 2.6-5.9", "M4 4.5V9h4.5"]} />;
+export const IChevron = () => <Icone d={["M6 9l6 6 6-6"]} />;

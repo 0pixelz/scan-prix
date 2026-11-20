@@ -57,7 +57,7 @@ export function analyser(g: Uint8Array, w = LARGEUR, h = HAUTEUR): Mesure {
   }
   const aretes = aretesPixels / ((w - 2) * (h - 2));
 
-  const carte = clair >= 120 && fond >= 0.45 && contraste >= 28 && aretes >= 0.05 && aretes <= 0.6;
+  const carte = clair >= 115 && fond >= 0.38 && contraste >= 24 && aretes >= 0.045 && aretes <= 0.6;
   return { clair, fond, aretes, contraste, carte };
 }
 
@@ -81,9 +81,15 @@ export function ecart(a: Float32Array, b: Float32Array): number {
   return s / a.length;
 }
 
-export const SEUIL_IMMOBILE = 4; // en dessous : la caméra ne bouge pas
+export const SEUIL_IMMOBILE = 5.5; // en dessous : la caméra ne bouge pas (une main tremble un peu, surtout avec le zoom)
 export const SEUIL_DEPLACEMENT = 10; // au-dessus : la caméra s'est déplacée vers autre chose
-export const IMAGES_STABLES = 5; // nombre de mesures immobiles avant de déclencher (environ 0,8 s)
+export const IMAGES_STABLES = 4; // nombre de mesures immobiles avant de déclencher (environ 0,6 s)
+export const IMAGES_PROBABLES = 7; // carte probable (moins nette, colorée, plus petite) : on attend un peu plus (environ 1,1 s)
+
+/** Carte probable : une tache claire avec du texte, à peu près centrée, qui occupe une bonne part du cadre. */
+export function carteProbable(b: Bande | null): boolean {
+  return Boolean(b && b.aretes >= 0.04 && Math.abs(b.cx - 0.5) <= 0.3 && Math.abs(b.cy - 0.5) <= 0.3 && (b.largeur >= 0.3 || b.hauteur >= 0.3));
+}
 
 export type Bande = { largeur: number; hauteur: number; cx: number; cy: number; aretes: number };
 

@@ -45,6 +45,10 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   - *Coût Claude* : photos lues, messages et coût estimé du mois, à partir des jetons comptés.
   - *Accès collègue* : deuxième code à 4 chiffres, en lecture seule ou complet, retirable à tout moment.
 
+  - *Apparence* : thème automatique, clair ou sombre, et taille du texte (gardés sur l'appareil).
+- **Gestes** : glisser une ligne vers la gauche pour la supprimer (récupérable), vers la droite pour la marquer
+  vérifiée ; tirer vers le bas pour actualiser. Le bouton de photo est au centre de la barre du bas.
+
 ## Installation
 
 1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, définir le code d'accès (commande en

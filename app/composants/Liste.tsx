@@ -6,6 +6,7 @@ import { correspond, grouper, normaliser, type Groupe } from "@/lib/comparaison"
 import type { ListeNom, ProduitListe, Scan, Visite } from "@/lib/types";
 import { ScannerCode } from "./Fenetres";
 import IconeProduit from "./IconeProduit";
+import { Fantomes } from "./Gestes";
 import { ICoche, ICodeBarres, IFermer, IListe, IPlus, IRecherche, chargerTout } from "./ui";
 
 /** Liste des produits à relever : coche automatique quand le produit est scanné dans la visite en cours. */
@@ -221,7 +222,7 @@ function ChoixProduits({ liste, listeId, fermer, ajoutes }: { liste: ProduitList
           <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher un produit, une marque" />
         </div>
         {erreur && <div className="alert">{erreur}</div>}
-        {groupes === null && !erreur && <p className="muted">Chargement…</p>}
+        {groupes === null && !erreur && <Fantomes n={5} />}
         {groupes !== null && !disponibles.length && (
           <div className="empty">
             <IListe />

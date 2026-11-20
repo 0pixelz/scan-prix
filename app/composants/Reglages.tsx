@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { lignesFiligrane } from "@/lib/filigrane";
 import type { Acces, Reglages as TReglages, Visite } from "@/lib/types";
+import type { Apparence } from "@/lib/apparence";
 import { IEffacer, IEtiquette, IMagasin, IRestaurer, argent, dateLisible, momentLisible } from "./ui";
 
-type Section = "filigrane" | "cout" | "acces" | "corbeille";
+type Section = "apparence" | "filigrane" | "cout" | "acces" | "corbeille";
 type Jete = { id: string; type: "visites" | "scans"; objet_id: string; donnees: Record<string, unknown>; lot: number; supprime_le: string };
 type Usage = { quand: string; fonction: string; modele: string; entree: number; sortie: number; photos: number };
 
@@ -14,7 +15,9 @@ const nombre = (v: number) => v.toLocaleString("fr-CA");
 const usd = (v: number) => `${v.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $ US`;
 
 /** Réglages : signature des photos, coût Claude, accès d'un collègue et corbeille. */
-export default function Reglages({ reglages, enregistrer, acces, rechargerAcces, visite, fermer, restaure, verrouiller, sectionInitiale }: {
+export default function Reglages({ apparence, changerApparence, reglages, enregistrer, acces, rechargerAcces, visite, fermer, restaure, verrouiller, sectionInitiale }: {
+  apparence: Apparence;
+  changerApparence: (a: Apparence) => void;
   reglages: TReglages;
   enregistrer: (r: TReglages) => Promise<string | null>;
   acces: Acces | null;
@@ -27,7 +30,7 @@ export default function Reglages({ reglages, enregistrer, acces, rechargerAcces,
 }) {
   const sb = supabaseBrowser();
   const lecture = acces?.role === "lecture";
-  const [section, setSection] = useState<Section>(sectionInitiale ?? "filigrane");
+  const [section, setSection] = useState<Section>(sectionInitiale ?? "apparence");
   const [f, setF] = useState(reglages.filigrane);
   const [tarifs, setTarifs] = useState(() => Object.fromEntries(Object.entries(reglages.tarifs).map(([k, v]) => [k, String(v).replace(".", ",")])) as Record<keyof TReglages["tarifs"], string>);
   const [message, setMessage] = useState("");
@@ -161,6 +164,7 @@ export default function Reglages({ reglages, enregistrer, acces, rechargerAcces,
           <button type="button" className="ghost" onClick={fermer}>Fermer</button>
         </div>
         <div className="chips" style={{ marginTop: 10 }}>
+          {puce("apparence", "Apparence")}
           {puce("filigrane", "Signature des photos")}
           {puce("cout", "Coût Claude")}
           {puce("acces", "Accès collègue")}
@@ -168,6 +172,32 @@ export default function Reglages({ reglages, enregistrer, acces, rechargerAcces,
         </div>
         {message && <div className="alert info">{message}</div>}
         {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
+
+        {section === "apparence" && (
+          <>
+            <label>Thème</label>
+            <div className="segments">
+              {([["auto", "Automatique"], ["clair", "Clair"], ["sombre", "Sombre"]] as const).map(([v, libelle]) => (
+                <button key={v} type="button" className={apparence.theme === v ? "on" : ""} onClick={() => changerApparence({ ...apparence, theme: v })}>{libelle}</button>
+              ))}
+            </div>
+            <div className="muted">Automatique suit le réglage de ton iPhone. Le thème clair se lit mieux sous l'éclairage d'un magasin.</div>
+            <label>Taille du texte</label>
+            <div className="segments">
+              {([["normal", "Normale"], ["grand", "Grande"], ["tresgrand", "Très grande"]] as const).map(([v, libelle]) => (
+                <button key={v} type="button" className={apparence.texte === v ? "on" : ""} onClick={() => changerApparence({ ...apparence, texte: v })}>{libelle}</button>
+              ))}
+            </div>
+            <div className="bloc">
+              <div className="tx" style={{ cursor: "default", borderBottom: 0, padding: 0 }}>
+                <div className="ic soft"><IEtiquette /></div>
+                <div className="mid"><div className="t">Beurre salé</div><div className="s">Lactantia · 454 g</div></div>
+                <div className="r"><b>6,49 $</b><span className="old">7,49 $</span></div>
+              </div>
+            </div>
+            <div className="muted">Ces deux choix sont gardés sur cet appareil seulement.</div>
+          </>
+        )}
 
         {section === "filigrane" && (
           <form onSubmit={(e) => { e.preventDefault(); sauver({ ...reglages, filigrane: { ...f, nom: f.nom.trim(), poste: f.poste.trim() } }, "Signature enregistrée. Elle s'applique aux prochaines photos."); }}>

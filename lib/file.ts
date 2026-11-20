@@ -9,6 +9,7 @@ export type PhotoEnAttente = {
   image: string; // photo réduite, envoyée en lecture
   originale: string | null; // photo en haute résolution, gardée pour le zoom
   priseLe: string;
+  signee?: boolean; // la copie gardée porte la signature : elle remplace aussi la photo de base
   mode: "carte" | "circulaire";
 };
 

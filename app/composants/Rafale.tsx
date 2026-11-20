@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HAUTEUR, IMAGES_STABLES, LARGEUR, SEUIL_DEPLACEMENT, SEUIL_IMMOBILE, analyser, bandeCarte, ecart, enGris, grossier, zoomPour } from "@/lib/detection";
+import { HAUTEUR, IMAGES_PROBABLES, IMAGES_STABLES, LARGEUR, carteProbable, SEUIL_DEPLACEMENT, SEUIL_IMMOBILE, analyser, bandeCarte, ecart, enGris, grossier, zoomPour } from "@/lib/detection";
 import { ICamera } from "./ui";
 
 const CLE_AUTO = "scanprix.auto";
@@ -135,6 +135,7 @@ export default function Rafale({ fermer, photo, enCours }: {
     const ctx = echantillon.getContext("2d", { willReadFrequently: true })!;
     let precedente: Float32Array | null = null;
     let stables = 0;
+    let probables = 0; // mesures consécutives où une carte probable est immobile dans le cadre
     let deplacements = 0;
     let loin = 0; // mesures consécutives où la carte est petite dans le cadre
     let perdue = 0; // mesures consécutives sans carte alors que le zoom automatique est actif
@@ -168,25 +169,41 @@ export default function Rafale({ fermer, photo, enCours }: {
         setProgres(stables / IMAGES_STABLES);
         if (stables >= IMAGES_STABLES) {
           stables = 0;
+          probables = 0;
           prendre();
         }
       } else {
         stables = 0;
-        setProgres(0);
         // Carte petite dans le cadre et caméra à peu près immobile : on est loin, on zoome.
         const b = mouvement < SEUIL_IMMOBILE * 1.5 ? bandeCarte(gris) : null;
         if (mouvement > SEUIL_DEPLACEMENT) zoomBloque = false;
         const facteur = b && !zoomBloque ? zoomPour(b) : 1;
         if (facteur > 1 && manuel.current * automatique.current < zoomMax.current - 0.05) {
           perdue = 0;
+          probables = 0;
+          setProgres(0);
           if (++loin >= 3) {
             loin = 0;
             automatique.current = Math.min(zoomMax.current / manuel.current, automatique.current * facteur);
             appliquerZoom();
             setEtat("zoom");
           }
+        } else if (carteProbable(b) && mouvement < SEUIL_IMMOBILE) {
+          // Le zoom ne peut plus aider (carte assez grande, ou zoom au maximum) : si la caméra reste immobile
+          // devant une carte probable, on prend la photo quand même.
+          loin = 0;
+          perdue = 0;
+          probables++;
+          setEtat("stable");
+          setProgres(probables / IMAGES_PROBABLES);
+          if (probables >= IMAGES_PROBABLES) {
+            probables = 0;
+            prendre();
+          }
         } else {
           loin = 0;
+          probables = 0;
+          setProgres(0);
           // Plus rien dans le cadre depuis environ deux secondes : on annule le zoom automatique.
           if (automatique.current > 1 && ++perdue >= 12) {
             perdue = 0;

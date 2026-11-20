@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabase";
-import { correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe } from "@/lib/comparaison";
+import { alertes, comparer, correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe, type LigneComparaison } from "@/lib/comparaison";
+import { appliquerApparence, lireApparence, type Apparence } from "@/lib/apparence";
 import { filigraner } from "@/lib/filigrane";
 import { ajouterPhoto, photosEnAttente, retirerPhoto, type PhotoEnAttente } from "@/lib/file";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { REGLAGES_DEFAUT, lireReglages, type Acces, type ListeNom, type ProduitListe, type Reference, type Reglages as TReglages, type Scan, type ScanAvecVisite, type Visite } from "@/lib/types";
 import Reglages from "./composants/Reglages";
+import { Fantomes, Glissable, Principal } from "./composants/Gestes";
 import Assistant from "./composants/Assistant";
 import Code from "./composants/Code";
 import Demarrage from "./composants/Demarrage";
@@ -18,7 +20,7 @@ import Liste from "./composants/Liste";
 import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
-  IAssistant, ICamera, IComparer, ICrayon, IReglages, IEtiquette, IExport, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  IAssistant, ICamera, IComparer, ICrayon, IReglages, IEtiquette, IExport, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
   PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
@@ -27,6 +29,9 @@ type Filtre = "tous" | "promos" | "verifier" | "doublons";
 
 export default function Page() {
   const [acces, setAcces] = useState<"verification" | "code" | "ouvert">("verification");
+
+  // Thème et taille du texte choisis sur cet appareil, appliqués avant le premier affichage
+  useLayoutEffect(() => { appliquerApparence(lireApparence(), false); }, []);
 
   // Service worker : l'app peut s'ouvrir sans réseau.
   useEffect(() => {
@@ -92,7 +97,6 @@ function App({ refuse }: { refuse: () => void }) {
   const [exportEnCours, setExportEnCours] = useState(false);
   const [recherche, setRecherche] = useState("");
   const [filtre, setFiltre] = useState<Filtre>("tous");
-  const [categorie, setCategorie] = useState("");
   const [confirmerDoublons, setConfirmerDoublons] = useState(false);
   const visiteRef = useRef<Visite | null>(null);
   visiteRef.current = visite;
@@ -102,12 +106,17 @@ function App({ refuse }: { refuse: () => void }) {
   const reglagesRef = useRef(reglages);
   reglagesRef.current = reglages;
   const [acces, setAcces] = useState<Acces | null>(null);
-  const [ouvrirReglages, setOuvrirReglages] = useState<null | "filigrane" | "corbeille">(null);
+  const [ouvrirReglages, setOuvrirReglages] = useState<null | "apparence" | "filigrane" | "corbeille">(null);
   const [annulable, setAnnulable] = useState<{ objetId: string; texte: string } | null>(null);
   const [tout, setTout] = useState<ScanAvecVisite[] | null>(null); // tous les prix, pour la recherche dans les autres visites
   const [version, setVersion] = useState(0); // augmente quand les données changent ailleurs que dans la visite en cours
   const [rapportEnCours, setRapportEnCours] = useState(false);
   const lecture = acces?.role === "lecture";
+  const [apparence, setApparence] = useState<Apparence>(lireApparence);
+  const [chargement, setChargement] = useState(true); // premier chargement des prix de la visite
+  const [comparaison, setComparaison] = useState<LigneComparaison[]>([]);
+  const [replies, setReplies] = useState<Set<string>>(new Set()); // catégories repliées
+  const [vignette, setVignette] = useState<{ image: string; texte: string; prix: string } | null>(null);
 
   // Copie locale des dernières données : l'app reste utilisable sans réseau.
   const lireCache = <T,>(cle: string): T | null => {
@@ -203,7 +212,10 @@ function App({ refuse }: { refuse: () => void }) {
     try { if (listeId) localStorage.setItem("scanprix.listeId", listeId); else localStorage.removeItem("scanprix.listeId"); } catch { /* stockage indisponible */ }
   }, [listeId]);
 
-  useEffect(() => { chargerScans(); }, [chargerScans, visite]);
+  useEffect(() => {
+    setChargement(true);
+    chargerScans().finally(() => setChargement(false));
+  }, [chargerScans, visite]);
   useEffect(() => { chargerListe(); }, [chargerListe]);
 
   // Prix de référence des produits affichés (par CUP)
@@ -222,10 +234,21 @@ function App({ refuse }: { refuse: () => void }) {
     if (!visiteId || enCours > 0) return;
     let annule = false;
     chargerTout(sb)
-      .then((tout) => { if (!annule) setNbVariations(variations(grouper(tout)).filter((c) => c.apres.visite_id === visiteId).length); })
+      .then((tout) => {
+        if (annule) return;
+        const groupes = grouper(tout);
+        setNbVariations(variations(groupes).filter((c) => c.apres.visite_id === visiteId).length);
+        setComparaison(comparer(groupes));
+      })
       .catch(() => {});
     return () => { annule = true; };
-  }, [sb, visiteId, enCours]);
+  }, [sb, visiteId, enCours, version, scans.length]);
+
+  // Alertes de cette visite : écarts au-dessus du seuil, par rapport à la référence et aux autres bannières
+  const nbAlertes = useMemo(
+    () => alertes(comparaison, (cup) => refs.get(cupNormalise(cup))?.prix, reglages.seuil).filter((a) => a.obs.visite_id === visiteId).length,
+    [comparaison, refs, reglages.seuil, visiteId],
+  );
 
   // File d'attente des photos, gardée sur l'appareil : chaque photo y reste jusqu'à ce qu'elle soit lue.
   // Trois lectures à la fois au maximum ; sans réseau, les photos attendent et repartent toutes seules.
@@ -272,9 +295,15 @@ function App({ refuse }: { refuse: () => void }) {
         if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
         else {
           if (visiteRef.current?.id === p.visiteId) setScans((s) => [...(json.scans as Scan[]), ...s]);
+          // Retour immédiat : vignette de la photo avec le prix lu, et vibration si l'appareil le permet
+          const lu = (json.scans as Scan[])[0];
+          const n = json.scans.length;
+          setVignette({ image: p.image, texte: n > 1 ? `${n} prix lus` : lu.produit || "Produit non lu", prix: n > 1 ? "" : argent(promoUnitaire(lu) ?? lu.prix_regulier) });
+          setTimeout(() => setVignette((v) => (v?.image === p.image ? null : v)), 2800);
+          try { navigator.vibrate?.(40); } catch { /* vibration non offerte */ }
           // Photo en haute résolution, gardée pour le zoom
           const chemin = (json.scans as Scan[])[0]?.photo_path;
-          if (p.originale && chemin) sb.functions.invoke("photo", { body: { path: chemin, originale: p.originale } }).catch(() => {});
+          if (p.originale && chemin) sb.functions.invoke("photo", { body: { path: chemin, originale: p.originale, signee: p.signee === true } }).catch(() => {});
         }
       } catch (e) {
         setErreur(e instanceof Error ? e.message : "Erreur inconnue");
@@ -316,10 +345,10 @@ function App({ refuse }: { refuse: () => void }) {
         const [{ image, originale: grande }, priseLe] = await Promise.all([reduire(fichier), datePhoto(fichier)]);
         // Signature au bas de la photo gardée (jamais sur l'image envoyée en lecture, ni sur une page de circulaire)
         const f = reglagesRef.current.filigrane;
-        const originale = f.actif && mode === "carte"
-          ? await filigraner(fichier, f, priseLe, [v.banniere, v.magasin].filter(Boolean).join(" · ")).catch(() => grande)
-          : grande;
-        const p: PhotoEnAttente = { id: crypto.randomUUID(), visiteId: v.id, image, originale, priseLe, mode };
+        const signee = f.actif && mode === "carte"
+          ? await filigraner(fichier, f, priseLe, [v.banniere, v.magasin].filter(Boolean).join(" · ")).catch(() => null)
+          : null;
+        const p: PhotoEnAttente = { id: crypto.randomUUID(), visiteId: v.id, image, originale: signee ?? grande, signee: Boolean(signee), priseLe, mode };
         await ajouterPhoto(p).catch(() => { memoire.current.set(p.id, p); });
       } catch {
         setErreur("Photo illisible : elle n'a pas été ajoutée.");
@@ -431,6 +460,34 @@ function App({ refuse }: { refuse: () => void }) {
 
   const enDouble = useMemo(() => doublons(scans), [scans]);
 
+  // Gestes sur une ligne : glisser à gauche pour supprimer (récupérable), à droite pour marquer vérifié
+  async function supprimerScan(s: Scan) {
+    const { data, error } = await sb.from("scans").delete().eq("id", s.id).select("id");
+    if (error || !data?.length) return setErreur(error?.message ?? "Accès en lecture seule : suppression refusée.");
+    setScans((l) => l.filter((x) => x.id !== s.id));
+    proposerAnnulation(s.id, "Prix supprimé.");
+  }
+  async function marquerVerifie(s: Scan) {
+    setScans((l) => l.map((x) => (x.id === s.id ? { ...x, confiance: "haute" } : x)));
+    const { data, error } = await sb.from("scans").update({ confiance: "haute" }).eq("id", s.id).select("id");
+    if (error || !data?.length) {
+      setScans((l) => l.map((x) => (x.id === s.id ? s : x)));
+      setErreur(error?.message ?? "Accès en lecture seule : modification refusée.");
+    }
+  }
+
+  function ouvrirScanner() {
+    if (!visiteRef.current) return setNouvelle(true);
+    setOnglet("scan");
+    setRafale(true);
+  }
+
+  const rafraichir = useCallback(async () => {
+    await Promise.all([chargerVisites(), chargerScans(), chargerListe()]);
+    setVersion((n) => n + 1);
+    traiterFile();
+  }, [chargerVisites, chargerScans, chargerListe, traiterFile]);
+
   async function supprimerDoublons() {
     const ids = [...enDouble];
     const { error } = await sb.from("scans").delete().in("id", ids);
@@ -442,13 +499,11 @@ function App({ refuse }: { refuse: () => void }) {
 
   const nbPromos = scans.filter((s) => s.prix_promo !== null).length;
   const nbVerif = scans.filter((s) => s.confiance && s.confiance !== "haute").length;
-  const categories = [...new Set(scans.map((s) => s.categorie).filter(Boolean))].sort() as string[];
   const mots = normaliser(recherche).split(" ").filter(Boolean);
   const visibles = scans.filter((s) => {
     if (filtre === "promos" && s.prix_promo === null) return false;
     if (filtre === "verifier" && (!s.confiance || s.confiance === "haute")) return false;
     if (filtre === "doublons" && !enDouble.has(s.id)) return false;
-    if (categorie && s.categorie !== categorie) return false;
     if (!mots.length) return true;
     const texte = normaliser([s.produit, s.marque, s.format, s.cup, s.code_article, s.categorie].filter(Boolean).join(" "));
     return mots.every((m) => texte.includes(m));
@@ -465,6 +520,59 @@ function App({ refuse }: { refuse: () => void }) {
       .slice(0, 15);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cherche, tout, recherche, visiteId]);
+  // Prix regroupés par catégorie, dans l'ordre alphabétique ; les prix sans catégorie à la fin
+  const sections = useMemo(() => {
+    const m = new Map<string, Scan[]>();
+    for (const s of visibles) {
+      const c = s.categorie || "Sans catégorie";
+      m.set(c, [...(m.get(c) ?? []), s]);
+    }
+    return [...m.entries()].sort((a, b) => (a[0] === "Sans catégorie" ? 1 : b[0] === "Sans catégorie" ? -1 : a[0].localeCompare(b[0], "fr")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scans, filtre, recherche, enDouble]);
+
+  const ligne = (s: Scan) => {
+    const pu = promoUnitaire(s);
+    const unite = prixParUnite(prixEffectif(s), s.format);
+    const ref = refs.get(cupNormalise(s.cup));
+    const ecartRef = ref && prixEffectif(s) !== null ? ((prixEffectif(s)! - ref.prix) / ref.prix) * 100 : null;
+    const incertain = Boolean(s.confiance && s.confiance !== "haute");
+    return (
+      <Glissable key={s.id}
+        gauche={lecture ? undefined : { libelle: "Supprimer", action: () => supprimerScan(s) }}
+        droite={lecture || !incertain ? undefined : { libelle: "Vérifié", action: () => marquerVerifie(s) }}>
+        <div className="tx" role="button" onClick={() => setEdition(s)}>
+          <IconeProduit icone={s.icone} categorie={s.categorie} />
+          <div className="mid">
+            <div className="t">{s.produit || "Produit non lu"}</div>
+            <div className="s">{[s.marque, s.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+            <div className="s">{momentLisible(s.photo_prise_le ?? s.created_at)}</div>
+            {s.prix_promo !== null && (
+              <span className="pill promo">
+                {s.promo_quantite && s.promo_quantite > 1 ? `${s.promo_quantite} pour ${argent(s.prix_promo)}` : "Promo"}
+                {s.date_fin ? ` · jusqu'au ${dateLisible(s.date_fin)}` : ""}
+              </span>
+            )}{" "}
+            {s.source === "circulaire" && <span className="pill membre">Circulaire</span>}{" "}
+            {ecartRef !== null && (
+              <span className={`pill ${ecartRef < -0.05 ? "baisse" : ecartRef > 0.05 ? "hausse" : "membre"}`}>
+                Réf. {argent(ref!.prix)} · {ecartRef > 0 ? "+" : ""}{ecartRef.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %
+              </span>
+            )}{" "}
+            {s.prix_membre && <span className="pill membre">Prix membre</span>}{" "}
+            {s.points ? <span className="pill pts">{s.points.toLocaleString("fr-CA")} points</span> : null}{" "}
+            {incertain && <span className="pill verif">À vérifier</span>}{" "}
+            {enDouble.has(s.id) && <span className="pill verif">Doublon</span>}
+          </div>
+          <div className="r">
+            <b>{argent(pu ?? s.prix_regulier)}</b>
+            {pu !== null && s.prix_regulier !== null && <span className="old">{argent(s.prix_regulier)}</span>}
+            {unite && <small>{texteUnite(unite)}</small>}
+          </div>
+        </div>
+      </Glissable>
+    );
+  };
   const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Analyse", assistant: "Assistant", visites: "Visites" };
   const aVerifier = scans.filter((s) => s.confiance && s.confiance !== "haute");
   const puce = (f: Filtre, libelle: string, n: number) => (
@@ -475,26 +583,24 @@ function App({ refuse }: { refuse: () => void }) {
     <div className="app">
       <header>
         <h1>{titres[onglet]}</h1>
-        {onglet === "scan" && visite && (
-          <span className="row">
-            <button className="small" disabled={rapportEnCours || !scans.length} onClick={() => rapport(visite)}>
-              <IJournal /> {rapportEnCours ? "…" : "Rapport"}
-            </button>
-            <button className="small" disabled={exportEnCours || !scans.length} onClick={() => exporter(visite)}>
-              <IExport /> Excel
-            </button>
-          </span>
-        )}
-        {onglet === "visites" && (
-          <span className="row">
-            <button className="small" aria-label="Réglages" onClick={() => setOuvrirReglages("filigrane")}><IReglages /> Réglages</button>
-            {!lecture && <button className="small" onClick={() => setNouvelle(true)}><IPlus /> Nouvelle</button>}
-          </span>
-        )}
+        <span className="row">
+          {onglet === "scan" && visite && (
+            <>
+              <button className="small" disabled={rapportEnCours || !scans.length} onClick={() => rapport(visite)}>
+                <IJournal /> {rapportEnCours ? "…" : "PDF"}
+              </button>
+              <button className="small" disabled={exportEnCours || !scans.length} onClick={() => exporter(visite)}>
+                <IExport /> Excel
+              </button>
+            </>
+          )}
+          {onglet === "visites" && !lecture && <button className="small" onClick={() => setNouvelle(true)}><IPlus /> Nouvelle</button>}
+          <button className="small rond" aria-label="Réglages" onClick={() => setOuvrirReglages("apparence")}><IReglages /></button>
+        </span>
       </header>
 
       {onglet === "scan" && (
-        <main className="withfab">
+        <Principal rafraichir={rafraichir}>
           {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
           {lecture && <div className="alert info">Accès en lecture seule : tu peux consulter, comparer et exporter.</div>}
 
@@ -516,16 +622,23 @@ function App({ refuse }: { refuse: () => void }) {
               )}
             </div>
             {visite && !lecture && <button className="ghost icone" aria-label="Modifier la visite" onClick={() => setModifVisite(visite)}><ICrayon /></button>}
-            {!lecture && <button className="ghost icone" aria-label="Nouvelle visite" onClick={() => setNouvelle(true)}><IPlus /></button>}
+            <button className="ghost icone" aria-label="Toutes les visites" onClick={() => setOnglet("visites")}><IMagasin /></button>
           </div>
 
           {visite && (
             <>
-              <div className="stats">
-                <div className="stat"><small>Prix</small><b>{scans.length}</b></div>
-                <div className="stat"><small>Promos</small><b>{nbPromos}</b></div>
+              <div className="stats quatre">
+                <button className={`stat ${filtre === "tous" && !recherche ? "" : "choisi"}`} onClick={() => { setFiltre("tous"); setRecherche(""); }}>
+                  <small>Prix</small><b>{scans.length}</b><em>{filtre === "tous" && !recherche ? `${nbPromos} promo${nbPromos > 1 ? "s" : ""}` : "Tout voir"}</em>
+                </button>
                 <button className={`stat ${nbVerif ? "action" : ""}`} disabled={!nbVerif} onClick={() => setRevision(true)}>
-                  <small>À vérifier</small><b>{nbVerif}</b>{nbVerif > 0 && <em>Réviser</em>}
+                  <small>À vérifier</small><b>{nbVerif}</b><em>{nbVerif ? "Réviser" : "Rien"}</em>
+                </button>
+                <button className={`stat ${nbAlertes ? "alerte" : ""}`} disabled={!nbAlertes} onClick={() => { setVueAnalyse("alertes"); setOnglet("comparer"); }}>
+                  <small>Alertes</small><b>{nbAlertes}</b><em>{nbAlertes ? "Voir" : `Seuil ${String(reglages.seuil).replace(".", ",")} %`}</em>
+                </button>
+                <button className="stat" disabled={!nbVariations} onClick={() => { setVueAnalyse("variations"); setOnglet("comparer"); }}>
+                  <small>Variations</small><b>{nbVariations}</b><em>{nbVariations ? "Voir" : "Aucune"}</em>
                 </button>
               </div>
 
@@ -540,16 +653,6 @@ function App({ refuse }: { refuse: () => void }) {
                 </div>
               )}
               {enCours > 0 && <div className="alert info">Lecture de {enCours} photo{enCours > 1 ? "s" : ""} en cours…</div>}
-
-              {nbVariations > 0 && (
-                <div className="card lien" role="button" onClick={() => { setVueAnalyse("variations"); setOnglet("comparer"); }}>
-                  <div className="ic soft"><IComparer /></div>
-                  <div className="grow">
-                    <b>{nbVariations} changement{nbVariations > 1 ? "s" : ""} de prix</b>
-                    <div className="muted">Depuis ta visite précédente chez {visite.banniere}</div>
-                  </div>
-                </div>
-              )}
 
               {enDouble.size > 0 && (
                 <div className="alert avis">
@@ -591,63 +694,44 @@ function App({ refuse }: { refuse: () => void }) {
                     {puce("promos", "Promos", nbPromos)}
                     {puce("verifier", "À vérifier", nbVerif)}
                     {enDouble.size > 0 && puce("doublons", "Doublons", enDouble.size)}
-                    {categories.length > 0 && (
-                      <select value={categorie} onChange={(e) => setCategorie(e.target.value)} aria-label="Catégorie">
-                        <option value="">Toutes les catégories</option>
-                        {categories.map((c) => <option key={c}>{c}</option>)}
-                      </select>
-                    )}
                   </div>
                 </>
               )}
 
               <div className="card">
-                <h2>Prix relevés</h2>
-                {!scans.length && (
+                <div className="row between">
+                  <h2 style={{ margin: 0 }}>Prix relevés</h2>
+                  {!lecture && <button className="small" onClick={() => setImporter(true)}><IPhotos /> Importer</button>}
+                </div>
+                {chargement && !scans.length && <Fantomes />}
+                {!chargement && !scans.length && (
                   <div className="empty">
                     <IEtiquette />
                     <div>Aucun prix pour l'instant.</div>
                     <div className="muted">Photographie une carte de prix, ou importe des photos déjà prises.</div>
+                    {!lecture && <button className="primary" style={{ marginTop: 12 }} onClick={ouvrirScanner}><ICamera /> Photographier</button>}
                   </div>
                 )}
-                {scans.length > 0 && !visibles.length && <div className="empty"><div>Aucun prix ne correspond dans cette visite.</div></div>}
-                {visibles.map((s) => {
-                  const pu = promoUnitaire(s);
-                  const unite = prixParUnite(prixEffectif(s), s.format);
-                  const ref = refs.get(cupNormalise(s.cup));
-                  const ecartRef = ref && prixEffectif(s) !== null ? ((prixEffectif(s)! - ref.prix) / ref.prix) * 100 : null;
+                {scans.length > 0 && !visibles.length && (
+                  <div className="empty">
+                    <div>Aucun prix ne correspond dans cette visite.</div>
+                    <button style={{ marginTop: 12 }} onClick={() => { setFiltre("tous"); setRecherche(""); }}>Tout afficher</button>
+                  </div>
+                )}
+                {sections.map(([nom, lignes]) => {
+                  const replie = replies.has(nom);
                   return (
-                    <div key={s.id} className="tx" role="button" onClick={() => setEdition(s)}>
-                      <IconeProduit icone={s.icone} categorie={s.categorie} />
-                      <div className="mid">
-                        <div className="t">{s.produit || "Produit non lu"}</div>
-                        <div className="s">{[s.marque, s.format, s.categorie].filter(Boolean).join(" · ") || "Aucun détail"}</div>
-                        <div className="s">{[momentLisible(s.photo_prise_le ?? s.created_at), visite.banniere, visite.magasin].filter(Boolean).join(" · ")}</div>
-                        {s.prix_promo !== null && (
-                          <span className="pill promo">
-                            {s.promo_quantite && s.promo_quantite > 1 ? `${s.promo_quantite} pour ${argent(s.prix_promo)}` : "Promo"}
-                            {s.date_fin ? ` · jusqu'au ${dateLisible(s.date_fin)}` : ""}
-                          </span>
-                        )}{" "}
-                        {s.source === "circulaire" && <span className="pill membre">Circulaire</span>}{" "}
-                        {ecartRef !== null && (
-                          <span className={`pill ${ecartRef < -0.05 ? "baisse" : ecartRef > 0.05 ? "hausse" : "membre"}`}>
-                            Réf. {argent(ref!.prix)} · {ecartRef > 0 ? "+" : ""}{ecartRef.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %
-                          </span>
-                        )}{" "}
-                        {s.prix_membre && <span className="pill membre">Prix membre</span>}{" "}
-                        {s.points ? <span className="pill pts">{s.points.toLocaleString("fr-CA")} points</span> : null}{" "}
-                        {s.confiance && s.confiance !== "haute" && <span className="pill verif">À vérifier</span>}{" "}
-                        {enDouble.has(s.id) && <span className="pill verif">Doublon</span>}
-                      </div>
-                      <div className="r">
-                        <b>{argent(pu ?? s.prix_regulier)}</b>
-                        {pu !== null && s.prix_regulier !== null && <span className="old">{argent(s.prix_regulier)}</span>}
-                        {unite && <small>{texteUnite(unite)}</small>}
-                      </div>
+                    <div key={nom} className="section">
+                      {sections.length > 1 && (
+                        <button className="entete" aria-expanded={!replie} onClick={() => setReplies((r) => { const n = new Set(r); if (replie) n.delete(nom); else n.add(nom); return n; })}>
+                          <IChevron /><span>{nom}</span><b>{lignes.length}</b>
+                        </button>
+                      )}
+                      {!(replie && sections.length > 1) && lignes.map(ligne)}
                     </div>
                   );
                 })}
+                {!lecture && scans.length > 0 && <div className="astuce">Glisse une ligne vers la gauche pour la supprimer{nbVerif ? ", vers la droite pour la marquer vérifiée" : ""}.</div>}
               </div>
 
               {ailleurs.length > 0 && (
@@ -675,7 +759,7 @@ function App({ refuse }: { refuse: () => void }) {
               )}
             </>
           )}
-        </main>
+        </Principal>
       )}
 
       {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} listes={listes} listeId={listeId} choisir={setListeId} rechargerListes={chargerListes} lecture={lecture} />}
@@ -686,11 +770,16 @@ function App({ refuse }: { refuse: () => void }) {
       {onglet === "assistant" && <Assistant visite={visite} modifie={() => { chargerScans(); chargerListe(); }} refuse={refuse} />}
 
       {onglet === "visites" && (
-        <main>
+        <Principal rafraichir={chargerVisites}>
           {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
           <div className="card">
             <h2>Mes visites</h2>
-            {!visites.length && <div className="empty"><IMagasin /><div>Aucune visite.</div></div>}
+            {!visites.length && (
+              <div className="empty">
+                <IMagasin /><div>Aucune visite.</div>
+                {!lecture && <button className="primary" style={{ marginTop: 12 }} onClick={() => setNouvelle(true)}><IPlus /> Nouvelle visite</button>}
+              </div>
+            )}
             {visites.map((v) => (
               <div key={v.id} className="tx" role="button" onClick={() => { setVisite(v); setOnglet("scan"); }}>
                 <PastilleBanniere banniere={v.banniere} doux={v.id !== visite?.id} />
@@ -700,10 +789,10 @@ function App({ refuse }: { refuse: () => void }) {
                 </div>
                 {!lecture && <button className="ghost icone" aria-label={`Modifier la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); setModifVisite(v); }}><ICrayon /></button>}
                 <button className="small" disabled={rapportEnCours} aria-label={`Rapport de la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); rapport(v); }}>
-                  <IJournal /> PDF
+                  PDF
                 </button>
-                <button className="small" disabled={exportEnCours} onClick={(e) => { e.stopPropagation(); exporter(v); }}>
-                  <IExport /> Excel
+                <button className="small" disabled={exportEnCours} aria-label={`Excel de la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); exporter(v); }}>
+                  Excel
                 </button>
               </div>
             ))}
@@ -713,7 +802,7 @@ function App({ refuse }: { refuse: () => void }) {
           </button>
           <button className="full" style={{ marginTop: 10 }} onClick={() => setOuvrirReglages("corbeille")}>Corbeille</button>
           <button className="full ghost" style={{ marginTop: 10 }} onClick={refuse}>Verrouiller l'app</button>
-        </main>
+        </Principal>
       )}
 
       {annulable && (
@@ -723,25 +812,19 @@ function App({ refuse }: { refuse: () => void }) {
         </div>
       )}
 
-      {onglet === "scan" && visite && !lecture && (
-        <div className="fab">
-          <div className="fabrow">
-            <button className="principal" onClick={() => setRafale(true)}>
-              <ICamera /> Photographier
-            </button>
-            <button className="secondaire" onClick={() => setImporter(true)}>
-              <IPhotos /> Importer
-            </button>
-          </div>
+      {vignette && (
+        <div className="vignette" role="status">
+          <img src={vignette.image} alt="" />
+          <span><b>{vignette.texte}</b><small>{vignette.prix ? `Lu : ${vignette.prix}` : "Ajoutés à la visite"}</small></span>
         </div>
       )}
 
       <nav>
         <button className={onglet === "scan" ? "on" : ""} onClick={() => setOnglet("scan")}><IEtiquette />Prix</button>
         <button className={onglet === "liste" ? "on" : ""} onClick={() => setOnglet("liste")}><IListe />Liste</button>
+        <button className="capture" aria-label="Photographier" disabled={lecture} onClick={ouvrirScanner}><span><ICamera /></span></button>
         <button className={onglet === "comparer" ? "on" : ""} onClick={() => { setVueAnalyse("comparer"); setOnglet("comparer"); }}><IComparer />Analyse</button>
         <button className={onglet === "assistant" ? "on" : ""} onClick={() => setOnglet("assistant")}><IAssistant />Assistant</button>
-        <button className={onglet === "visites" ? "on" : ""} onClick={() => setOnglet("visites")}><IMagasin />Visites</button>
       </nav>
 
       {nouvelle && (
@@ -830,6 +913,8 @@ function App({ refuse }: { refuse: () => void }) {
           rechargerAcces={chargerAcces}
           visite={visite}
           sectionInitiale={ouvrirReglages}
+          apparence={apparence}
+          changerApparence={(a) => { setApparence(a); appliquerApparence(a); }}
           fermer={() => setOuvrirReglages(null)}
           restaure={apresRestauration}
           verrouiller={refuse}

@@ -6,6 +6,7 @@ import { alertes, comparer, cupNormalise, grouper, indices, normaliser, prixEffe
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
+import { Fantomes } from "./Gestes";
 import { IComparer, IRecherche, PastilleBanniere, argent, chargerReferences, chargerTout, dateLisible } from "./ui";
 
 export type VueAnalyse = "comparer" | "tableau" | "variations" | "alertes" | "reference";
@@ -115,7 +116,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
           <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher un produit" />
         </div>
       )}
-      {chargement && <p className="muted">Chargement…</p>}
+      {chargement && <div className="card"><Fantomes n={5} /></div>}
 
       {/* ---------- Comparer ---------- */}
       {vue === "comparer" && scans !== null && (() => {

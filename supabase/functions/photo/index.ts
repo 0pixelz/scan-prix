@@ -2,6 +2,8 @@
 // - { path } ou { path, grande: true } : renvoie une adresse temporaire pour afficher la photo
 //   (la version en haute résolution si elle existe et que « grande » est demandé).
 // - { path, originale } : enregistre la version en haute résolution d'une photo déjà lue.
+//   Avec « signee: true », cette version (qui porte la signature) remplace aussi la photo de base :
+//   la photo gardée est alors signée partout où elle est affichée.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
@@ -16,7 +18,7 @@ Deno.serve(async (req) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: acces } = await sb.rpc("verifier_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
     if (!acces) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
-    const { path, grande, originale } = await req.json().catch(() => ({}));
+    const { path, grande, originale, signee } = await req.json().catch(() => ({}));
     const nom = typeof path === "string" ? path.match(/^cartes\/([\w-]+\.jpg)$/)?.[1] : null;
     if (!nom) return json({ error: "Photo introuvable." });
     const seau = sb.storage.from("photos");
@@ -26,7 +28,12 @@ Deno.serve(async (req) => {
       if (base64.length > 6_000_000) return json({ error: "Photo trop lourde." });
       const octets = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       const { error } = await seau.upload(`originales/${nom}`, octets, { contentType: "image/jpeg", upsert: true });
-      return error ? json({ error: error.message }) : json({ ok: true });
+      if (error) return json({ error: error.message });
+      if (signee === true) {
+        const { error: e2 } = await seau.upload(`cartes/${nom}`, octets, { contentType: "image/jpeg", upsert: true });
+        if (e2) return json({ error: e2.message });
+      }
+      return json({ ok: true });
     }
 
     if (grande) {
