@@ -88,7 +88,7 @@ export default function Visionneuse({ src, fermer }: { src: string; fermer: () =
         onPointerUp={relache}
         onPointerCancel={relache}
       >
-        <img
+        <img referrerPolicy="no-referrer"
           src={src}
           alt="Photo de la carte de prix, agrandie"
           draggable={false}

@@ -5,7 +5,7 @@ import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabas
 import { alertes, comparer, correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe, type LigneComparaison } from "@/lib/comparaison";
 import { appliquerApparence, lireApparence, type Apparence } from "@/lib/apparence";
 import { filigraner } from "@/lib/filigrane";
-import { chercherImage } from "@/lib/image";
+import { chercherImage, cleImage, dejaEssaye, noterEssai } from "@/lib/image";
 import { ajouterPhoto, photosEnAttente, retirerPhoto, type PhotoEnAttente } from "@/lib/file";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { REGLAGES_DEFAUT, lireReglages, type Acces, type ListeNom, type ProduitListe, type Reference, type Reglages as TReglages, type Scan, type ScanAvecVisite, type Visite } from "@/lib/types";
@@ -220,27 +220,25 @@ function App({ refuse }: { refuse: () => void }) {
   }, [chargerScans, visite]);
   useEffect(() => { chargerListe(); }, [chargerListe]);
 
-  // Image du vrai produit pour les prix qui n'en ont pas : code-barres, puis description exacte, puis circulaire.
-  // Chaque produit n'est cherché qu'une fois par ouverture, quelques-uns à la fois.
-  const imagesEssayees = useRef(new Set<string>());
+  // Image du vrai produit pour les prix qui n'en ont pas : Google Images, circulaire, puis bases ouvertes.
+  // Un produit cherché sans succès n'est pas recherché de nouveau avant 30 jours (quota du service d'images).
   useEffect(() => {
     let annule = false;
-    const cle = (x: Scan) => x.cup ?? `desc:${x.marque}|${x.produit}|${x.format}`;
     (async () => {
-      const aChercher = scans.filter((x) => !x.image_produit && (x.cup || (x.marque && x.produit)) && !imagesEssayees.current.has(cle(x)));
-      for (const s of aChercher.filter((x, i) => aChercher.findIndex((y) => cle(y) === cle(x)) === i).slice(0, 10)) {
+      const aChercher = scans.filter((x) => !x.image_produit && (x.cup || (x.marque && x.produit)) && !dejaEssaye(cleImage(x)));
+      for (const s of aChercher.filter((x, i) => aChercher.findIndex((y) => cleImage(y) === cleImage(x)) === i).slice(0, 10)) {
         if (annule || !navigator.onLine) return;
         const url = await chercherImage(sb, s, reglagesRef.current.codePostal);
         if (url === undefined) return; // service occupé : on réessaiera à la prochaine ouverture
-        imagesEssayees.current.add(cle(s));
+        noterEssai(cleImage(s));
         if (url && !annule) {
-          setScans((l) => l.map((x) => (cle(x) === cle(s) && !x.image_produit ? { ...x, image_produit: url } : x)));
+          setScans((l) => l.map((x) => (cleImage(x) === cleImage(s) && !x.image_produit ? { ...x, image_produit: url } : x)));
           if (!lecture) {
             const maj = sb.from("scans").update({ image_produit: url }).eq("visite_id", s.visite_id).is("image_produit", null);
             (s.cup ? maj.eq("cup", s.cup) : maj.eq("id", s.id)).then(() => {});
           }
         }
-        if (!s.cup) await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, 600));
       }
     })();
     return () => { annule = true; };
@@ -894,7 +892,7 @@ function App({ refuse }: { refuse: () => void }) {
         <Edition
           scan={edition}
           fermer={() => setEdition(null)}
-          enregistre={(s) => { setScans((l) => l.map((x) => (x.id === s.id ? s : x))); setEdition(null); }}
+          enregistre={(s, garderOuvert) => { setScans((l) => l.map((x) => (x.id === s.id ? s : x))); if (!garderOuvert) setEdition(null); }}
           supprime={(id) => { setScans((l) => l.filter((x) => x.id !== id)); setEdition(null); proposerAnnulation(id, "Prix supprimé."); }}
           historique={ouvrirHistorique}
           lecture={lecture}

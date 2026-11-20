@@ -31,7 +31,7 @@ export default function IconeProduit({ icone, categorie, image }: { icone: strin
   if (image && !cassee) {
     return (
       <div className="ic produit">
-        <img src={image} alt="" loading="lazy" onError={() => setCassee(true)} />
+        <img referrerPolicy="no-referrer" src={image} alt="" loading="lazy" onError={() => setCassee(true)} />
       </div>
     );
   }

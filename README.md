@@ -58,7 +58,8 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   avec le prix de référence ou le relevé. La dernière recherche est gardée : ses écarts apparaissent dans Alertes,
   l'Excel (onglet Circulaires) et le rapport de visite. Ce sont des suggestions à confirmer.
 
-- **Photo du produit** : quand le code-barres est lu, l'image du vrai produit est cherchée dans Open Food Facts
+- **Photo du produit** : cherchée d'abord dans Google Images (service Serper, secret `SERPER_API_KEY`), puis dans
+  les circulaires, toujours au même format ; sinon, quand le code-barres est lu, dans Open Food Facts
   (base ouverte) et remplace l'icône. Le CUP imprimé sans chiffre de contrôle est complété automatiquement.
   Sans code-barres ou si le code est inconnu, la recherche se fait par description et ne garde qu'une
   correspondance exacte (marque, nom, format), dans Open Food Facts puis dans les offres de circulaires.

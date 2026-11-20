@@ -34,7 +34,12 @@ const imagePermise = (url: unknown): url is string => typeof url === "string" &&
 export const imageEnGrand = (url: string) => url.replace(/\.(200|400)\.jpg$/, ".full.jpg");
 
 /** D'où vient l'image, pour l'afficher sous la photo. */
-export const sourceImage = (url: string) => (url.includes("wishabi") ? "circulaire (Flipp)" : url.includes("openfoodfacts") ? "Open Food Facts" : "base ouverte Open Facts");
+export function sourceImage(url: string): string {
+  if (url.includes("wishabi")) return "circulaire (Flipp)";
+  if (url.includes("openfoodfacts")) return "Open Food Facts";
+  if (/open(petfood|products|beauty)facts/.test(url)) return "base ouverte Open Facts";
+  try { return `Google Images (${new URL(url).hostname.replace(/^www\./, "")})`; } catch { return "Google Images"; }
+}
 
 /** Adresse de la petite image du produit, ou null s'il n'est dans aucune base. */
 export async function imageProduit(cup: string | null | undefined): Promise<string | null> {
@@ -91,19 +96,34 @@ export async function imageParDescription(nom: string | null, marque: string | n
   return null;
 }
 
+// Produits déjà cherchés sans succès, gardés sur l'appareil : on ne refait pas la recherche avant 30 jours
+// (chaque recherche compte dans le quota du service d'images).
+const CLE_ESSAIS = "scanprix.imagesEssayees";
+const lireEssais = (): Record<string, number> => {
+  try { return JSON.parse(localStorage.getItem(CLE_ESSAIS) ?? "{}") as Record<string, number>; } catch { return {}; }
+};
+export const cleImage = (s: { cup: string | null; produit: string | null; marque: string | null; format: string | null }) =>
+  s.cup ? `cup:${s.cup}` : `desc:${s.marque}|${s.produit}|${s.format}`;
+export const dejaEssaye = (cle: string) => Date.now() - (lireEssais()[cle] ?? 0) < 30 * 86400000;
+export function noterEssai(cle: string) {
+  try {
+    const essais = Object.entries({ ...lireEssais(), [cle]: Date.now() }).sort((a, b) => b[1] - a[1]).slice(0, 3000);
+    localStorage.setItem(CLE_ESSAIS, JSON.stringify(Object.fromEntries(essais)));
+  } catch { /* stockage indisponible */ }
+}
+
 /**
- * Image d'un produit, dans l'ordre : photo nette d'une offre de circulaire au même format (si le code postal est
- * réglé), puis par code-barres dans les bases ouvertes, puis par description exacte dans Open Food Facts.
- * Les photos de circulaire passent en premier : ce sont de vraies photos de produit, celles des bases ouvertes
- * sont souvent prises par des particuliers.
+ * Image d'un produit, dans l'ordre : vraie photo trouvée par la fonction « image » (Google Images, puis offre de
+ * circulaire, toujours au même format), puis par code-barres dans les bases ouvertes, puis par description exacte
+ * dans Open Food Facts.
  * Renvoie undefined si un service ne répondait pas (à réessayer), null si rien d'exact n'existe.
  */
 export async function chercherImage(sb: SupabaseClient, s: { cup: string | null; produit: string | null; marque: string | null; format: string | null }, codePostal?: string): Promise<string | null | undefined> {
   let aReessayer = false;
-  if (codePostal && s.produit && s.marque && s.format) {
-    const { data, error } = await sb.functions.invoke("image", { body: { nom: s.produit, marque: s.marque, format: s.format, codePostal } });
-    if (error) aReessayer = true;
-    else if (typeof data?.url === "string" && data.url.startsWith("https://f.wishabi.net/")) return data.url;
+  if (s.produit && s.marque && s.format) {
+    const { data, error } = await sb.functions.invoke("image", { body: { nom: s.produit, marque: s.marque, format: s.format, codePostal: codePostal ?? "" } });
+    if (error || data?.panne) aReessayer = true;
+    if (typeof data?.url === "string" && data.url.startsWith("https://")) return data.url;
   }
   if (s.cup) {
     const parCode = await imageProduit(s.cup);

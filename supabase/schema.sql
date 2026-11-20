@@ -434,3 +434,17 @@ alter table public.promos_circulaires enable row level security;
 create policy "promos avec jeton" on public.promos_circulaires for all to anon
   using ((select public.jeton_valide())) with check ((select public.jeton_ecriture()));
 create policy "suppression complet seulement" on public.promos_circulaires as restrictive for delete to anon using ((select public.jeton_ecriture()));
+
+-- Clé du service de recherche d'images (Serper, résultats de Google Images), lue par la fonction image.
+-- Écrite une seule fois par le flux GitHub « Enregistrer la clé des images », puis l'accès d'écriture est retiré.
+create or replace function public.lire_cle_images()
+returns text language plpgsql security definer set search_path = '' as $$
+declare r text;
+begin
+  if coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '') <> 'service_role' then
+    raise exception 'Acces refuse';
+  end if;
+  select decrypted_secret into r from vault.decrypted_secrets where name = 'serper_api_key' limit 1;
+  return r;
+end $$;
+revoke execute on function public.lire_cle_images() from public, anon, authenticated;

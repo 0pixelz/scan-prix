@@ -6,7 +6,7 @@ import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type G
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
-import { chercherImage, imageEnGrand, sourceImage } from "@/lib/image";
+import { chercherImage, cleImage, dejaEssaye, imageEnGrand, noterEssai, sourceImage } from "@/lib/image";
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
@@ -200,7 +200,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   codePostal?: string;
   lecture?: boolean;
   fermer: () => void;
-  enregistre: (s: Scan) => void;
+  enregistre: (s: Scan, garderOuvert?: boolean) => void;
   supprime: (id: string) => void;
   historique: (s: Scan) => void;
 }) {
@@ -269,11 +269,22 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   const [imageP, setImageP] = useState<string | null>(scan.image_produit ?? null);
   const [produitAgrandi, setProduitAgrandi] = useState(false);
   useEffect(() => {
-    if (scan.image_produit) return;
+    if (scan.image_produit || dejaEssaye(cleImage(scan))) return;
     let annule = false;
-    chercherImage(sb, scan, codePostal).then((url) => { if (!annule && url) setImageP(url); });
+    chercherImage(sb, scan, codePostal).then((url) => {
+      if (url !== undefined) noterEssai(cleImage(scan));
+      if (!annule && url) setImageP(url);
+    });
     return () => { annule = true; };
   }, [scan.image_produit, scan.cup, scan.produit, scan.marque, scan.format]);
+
+  // Mauvaise photo : on la retire, et le produit n'est pas recherché de nouveau avant 30 jours.
+  async function retirerImage() {
+    noterEssai(cleImage(scan));
+    setImageP(null);
+    const { data } = await sb.from("scans").update({ image_produit: null }).eq("id", scan.id).select().single();
+    if (data) enregistre(data as Scan, true);
+  }
 
   if (produitAgrandi && imageP) return <Visionneuse src={imageEnGrand(imageP)} fermer={() => setProduitAgrandi(false)} />;
   if (agrandie && photo) return <Visionneuse src={photo} fermer={() => setAgrandie(false)} />;
@@ -289,12 +300,13 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
         {imageP && (
           <div className="entete-produit">
             <button type="button" aria-label="Agrandir la photo du produit" onClick={() => setProduitAgrandi(true)}>
-              <img src={imageP.replace(/\.200\.jpg$/, ".400.jpg")} alt={`Photo du produit ${scan.produit ?? ""}`} onError={() => setImageP(null)} />
+              <img referrerPolicy="no-referrer" src={imageP.replace(/\.200\.jpg$/, ".400.jpg")} alt={`Photo du produit ${scan.produit ?? ""}`} onError={() => setImageP(null)} />
             </button>
             <div>
               <b>{scan.produit || "Produit non lu"}</b>
               <span>{[scan.marque, scan.format].filter(Boolean).join(" · ")}</span>
               <small>Image : {sourceImage(imageP)} · touche pour agrandir</small>
+              {!lecture && <button type="button" className="lien" onClick={retirerImage}>Ce n'est pas le bon produit</button>}
             </div>
           </div>
         )}
