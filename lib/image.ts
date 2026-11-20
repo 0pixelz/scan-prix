@@ -92,21 +92,24 @@ export async function imageParDescription(nom: string | null, marque: string | n
 }
 
 /**
- * Image d'un produit, dans l'ordre : par code-barres dans les bases ouvertes, par description exacte dans
- * Open Food Facts, puis dans une offre de circulaire au même format (si le code postal est réglé).
+ * Image d'un produit, dans l'ordre : photo nette d'une offre de circulaire au même format (si le code postal est
+ * réglé), puis par code-barres dans les bases ouvertes, puis par description exacte dans Open Food Facts.
+ * Les photos de circulaire passent en premier : ce sont de vraies photos de produit, celles des bases ouvertes
+ * sont souvent prises par des particuliers.
  * Renvoie undefined si un service ne répondait pas (à réessayer), null si rien d'exact n'existe.
  */
 export async function chercherImage(sb: SupabaseClient, s: { cup: string | null; produit: string | null; marque: string | null; format: string | null }, codePostal?: string): Promise<string | null | undefined> {
+  let aReessayer = false;
+  if (codePostal && s.produit && s.marque && s.format) {
+    const { data, error } = await sb.functions.invoke("image", { body: { nom: s.produit, marque: s.marque, format: s.format, codePostal } });
+    if (error) aReessayer = true;
+    else if (typeof data?.url === "string" && data.url.startsWith("https://f.wishabi.net/")) return data.url;
+  }
   if (s.cup) {
     const parCode = await imageProduit(s.cup);
     if (parCode) return parCode;
   }
   const parTexte = await imageParDescription(s.produit, s.marque, s.format);
   if (parTexte) return parTexte;
-  if (codePostal && s.produit && s.marque && s.format) {
-    const { data, error } = await sb.functions.invoke("image", { body: { nom: s.produit, marque: s.marque, format: s.format, codePostal } });
-    if (error) return undefined;
-    if (typeof data?.url === "string" && data.url.startsWith("https://f.wishabi.net/")) return data.url;
-  }
-  return parTexte;
+  return aReessayer || parTexte === undefined ? undefined : null;
 }
