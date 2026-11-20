@@ -152,6 +152,38 @@ export async function GET(req: Request) {
   if (!depassements.length) al.addRow({ type: `Aucun écart de ${seuil} % ou plus.` });
   entete(al);
 
+  // --- Onglet Circulaires : promos concurrentes trouvées à la dernière recherche (source Flipp, non officielle) ---
+  const requetePromos = supabase.from("promos_circulaires").select("*").order("ecart_pct", { ascending: true }).limit(5000);
+  const { data: promos } = await (visiteId ? requetePromos.eq("visite_id", visiteId) : requetePromos);
+  const ci = wb.addWorksheet("Circulaires");
+  ci.columns = [
+    { header: "Produit", key: "produit", width: 34 },
+    { header: "Marque", key: "marque", width: 16 },
+    { header: "Format", key: "format", width: 12 },
+    { header: "CUP", key: "cup", width: 16 },
+    { header: "Mon prix", key: "mon_prix", width: 11, style: { numFmt: DOLLARS } },
+    { header: "Source de mon prix", key: "source_prix", width: 18 },
+    { header: "Bannière", key: "banniere", width: 16 },
+    { header: "Offre de la circulaire", key: "offre", width: 40 },
+    { header: "Format de l'offre", key: "format_offre", width: 14 },
+    { header: "Prix promo", key: "prix", width: 11, style: { numFmt: DOLLARS } },
+    { header: "Quantité", key: "quantite", width: 9 },
+    { header: "Comparaison", key: "verdict", width: 22 },
+    { header: "Écart (%)", key: "ecart", width: 11, style: { numFmt: "0.0 %" } },
+    { header: "Fin de la promo", key: "fin", width: 14 },
+    { header: "Trouvée le", key: "trouve", width: 12 },
+  ];
+  (promos ?? []).forEach((p) => {
+    ci.addRow({
+      ...p, mon_prix: Number(p.mon_prix), prix: Number(p.prix),
+      verdict: p.verdict === "identique" ? "Identique" : p.ecart_pct === null ? "Proche, format à confirmer" : "Proche, par unité",
+      ecart: p.ecart_pct === null ? null : Number(p.ecart_pct) / 100,
+      fin: p.fin ? String(p.fin).slice(0, 10) : null, trouve: String(p.trouve_le).slice(0, 10),
+    });
+  });
+  if (!promos?.length) ci.addRow({ produit: "Aucune promo gardée. Lance une recherche dans Analyse > Circulaires." });
+  entete(ci);
+
   // --- Onglet Variations : dernier prix comparé à la visite précédente dans la même bannière ---
   const vr = wb.addWorksheet("Variations");
   vr.columns = [

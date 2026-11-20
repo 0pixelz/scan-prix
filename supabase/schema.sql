@@ -418,3 +418,19 @@ revoke execute on function public.lire_cle_secours() from public, anon, authenti
 
 -- Image du produit (trouvée par son code-barres dans Open Food Facts), affichée à la place de l'icône.
 alter table public.scans add column if not exists image_produit text;
+
+-- Promos des circulaires trouvées pour des produits relevés (dernière recherche de chaque visite).
+create table if not exists public.promos_circulaires (
+  id uuid primary key default gen_random_uuid(),
+  visite_id uuid references public.visites(id) on delete cascade,
+  produit text not null, marque text, format text, cup text,
+  mon_prix numeric not null, source_prix text,
+  banniere text not null, offre text not null, prix numeric not null, prix_offre numeric,
+  quantite int not null default 1, format_offre text, verdict text not null,
+  ecart_pct numeric, par_unite text, fin timestamptz, trouve_le timestamptz not null default now()
+);
+create index if not exists promos_circulaires_visite on public.promos_circulaires (visite_id);
+alter table public.promos_circulaires enable row level security;
+create policy "promos avec jeton" on public.promos_circulaires for all to anon
+  using ((select public.jeton_valide())) with check ((select public.jeton_ecriture()));
+create policy "suppression complet seulement" on public.promos_circulaires as restrictive for delete to anon using ((select public.jeton_ecriture()));

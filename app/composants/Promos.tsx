@@ -22,7 +22,8 @@ const MAX = 30;
  * Promos en cours dans les circulaires des autres bannières, pour les produits relevés, avec l'écart par rapport
  * à mon prix. Suggestions tirées de Flipp (source non officielle) : à confirmer avant de s'en servir.
  */
-export default function Promos({ groupes, refs, visiteId, seuil, codePostal, changerCodePostal, lecture, historique, refuse }: {
+export default function Promos({ enregistre, groupes, refs, visiteId, seuil, codePostal, changerCodePostal, lecture, historique, refuse }: {
+  enregistre?: () => void;
   groupes: Groupe[];
   refs: Map<string, Reference>;
   visiteId: string | null;
@@ -84,6 +85,23 @@ export default function Promos({ groupes, refs, visiteId, seuil, codePostal, cha
       const r: Resultat = { quand: Date.now(), juge: data.juge === true, offres: Object.fromEntries((data.resultats as { id: string; offres: Offre[] }[]).map((x) => [x.id, x.offres])) };
       setResultat(r);
       try { sessionStorage.setItem(cle, JSON.stringify(r)); } catch { /* stockage indisponible */ }
+      // La dernière recherche est gardée : elle alimente les alertes, l'Excel et le rapport de visite.
+      if (!lecture) {
+        const lignes = vises.flatMap((p) => (r.offres[p.groupe.id] ?? []).map((o) => {
+          const e = ecart(p.prix, p.groupe.format, o);
+          return {
+            visite_id: visiteId, produit: p.groupe.nom, marque: p.groupe.marque, format: p.groupe.format, cup: p.groupe.cup,
+            mon_prix: p.prix, source_prix: p.source, banniere: o.banniere, offre: o.nom, prix: o.prix, prix_offre: o.prixOffre,
+            quantite: o.quantite, format_offre: o.format, verdict: o.verdict, ecart_pct: e ? Math.round(e.pct * 10) / 10 : null,
+            par_unite: e?.parUnite ?? null, fin: o.fin,
+          };
+        }));
+        const anciennes = sb.from("promos_circulaires").delete();
+        const { error: e1 } = await (visiteId ? anciennes.eq("visite_id", visiteId) : anciennes.is("visite_id", null));
+        const { error: e2 } = !e1 && lignes.length ? await sb.from("promos_circulaires").insert(lignes) : { error: null };
+        if (e1 || e2) setErreur("Les promos sont affichées, mais n'ont pas pu être gardées pour les alertes et le rapport.");
+        else enregistre?.();
+      }
     } catch (e) {
       setErreur(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {

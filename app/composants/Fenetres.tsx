@@ -6,7 +6,7 @@ import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type G
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
-import { imageProduit } from "@/lib/image";
+import { imageParDescription, imageProduit } from "@/lib/image";
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
@@ -267,11 +267,11 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   // Photo du vrai produit : celle déjà trouvée, sinon cherchée par le code-barres
   const [imageP, setImageP] = useState<string | null>(scan.image_produit ?? null);
   useEffect(() => {
-    if (scan.image_produit || !scan.cup) return;
+    if (scan.image_produit) return;
     let annule = false;
-    imageProduit(scan.cup).then((url) => { if (!annule && url) setImageP(url); });
+    (scan.cup ? imageProduit(scan.cup) : imageParDescription(scan.produit, scan.marque, scan.format)).then((url) => { if (!annule && url) setImageP(url); });
     return () => { annule = true; };
-  }, [scan.image_produit, scan.cup]);
+  }, [scan.image_produit, scan.cup, scan.produit, scan.marque, scan.format]);
 
   if (agrandie && photo) return <Visionneuse src={photo} fermer={() => setAgrandie(false)} />;
 

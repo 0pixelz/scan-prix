@@ -194,7 +194,7 @@ export async function GET(req: Request) {
   // ---------- Alertes ----------
   const seuilTexte = String(reglages.seuil).replace(".", ",");
   section("Alertes", `Écarts de ${seuilTexte} % ou plus.`);
-  if (!vsRef.length && !vsAutres.length) {
+  if (!vsRef.length && !vsAutres.length) { // (les promos de circulaires, s'il y en a, suivent plus bas)
     y -= 12;
     ecrire(`Aucun écart de ${seuilTexte} % ou plus par rapport à la liste de référence ou aux autres bannières.`, MARGE, 8.5, normal, GRIS);
   }
@@ -214,6 +214,26 @@ export async function GET(req: Request) {
     tableau(
       [{ titre: "PRODUIT", largeur: 250 }, { titre: visite.banniere.toUpperCase(), largeur: 65, droite: true }, { titre: "AILLEURS", largeur: 130, droite: true }, { titre: "ÉCART", largeur: 70, droite: true }],
       vsAutres.map((a) => [nomProduit(a.groupe), argent(a.moi.prix), `${a.autre.banniere} ${argent(a.autre.prix)}`, { texte: pct(a.ecart), couleur: a.ecart > 0 ? ROUGE : VERT }]),
+      30,
+    );
+  }
+
+  // Promos des circulaires concurrentes sous mon prix (dernière recherche de cette visite)
+  const { data: promosCirc } = await supabase.from("promos_circulaires").select("*").eq("visite_id", visiteId).not("ecart_pct", "is", null).lte("ecart_pct", -reglages.seuil).order("ecart_pct", { ascending: true }).limit(200);
+  const enCours = (promosCirc ?? []).filter((p) => !p.fin || Date.parse(p.fin) > Date.now());
+  if (enCours.length) {
+    y -= 16;
+    place(40);
+    ecrire("Promos des circulaires concurrentes (source Flipp, à confirmer)", MARGE, 9.5, gras);
+    tableau(
+      [{ titre: "PRODUIT", largeur: 215 }, { titre: "MON PRIX", largeur: 60, droite: true }, { titre: "PROMO", largeur: 120, droite: true }, { titre: "COMPARAISON", largeur: 65, droite: true }, { titre: "ÉCART", largeur: 55, droite: true }],
+      enCours.map((p) => [
+        [p.marque, p.produit, p.format].filter(Boolean).join(" · "),
+        argent(Number(p.mon_prix)),
+        `${p.banniere} ${argent(Number(p.prix))}`,
+        p.verdict === "identique" ? "Identique" : "Par unité",
+        { texte: pct(Number(p.ecart_pct)), couleur: ROUGE },
+      ]),
       30,
     );
   }

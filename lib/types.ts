@@ -47,6 +47,14 @@ export type Reference = { cup: string; nom: string | null; prix: number };
 
 export type ProduitListe = { id: string; nom: string; cup: string | null; liste_id?: string | null; created_at: string };
 
+/** Promo de circulaire gardée après une recherche (onglet Analyse > Circulaires). */
+export type PromoCirculaire = {
+  id: string; visite_id: string | null; produit: string; marque: string | null; format: string | null; cup: string | null;
+  mon_prix: number; source_prix: string | null; banniere: string; offre: string; prix: number; prix_offre: number | null;
+  quantite: number; format_offre: string | null; verdict: string; ecart_pct: number | null; par_unite: string | null;
+  fin: string | null; trouve_le: string;
+};
+
 export type ListeNom = { id: string; nom: string; created_at: string };
 
 /** Signature ajoutée au bas des photos gardées (jamais sur l'image envoyée en lecture). */

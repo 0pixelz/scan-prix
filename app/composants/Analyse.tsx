@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { lireJeton, supabaseBrowser } from "@/lib/supabase";
 import { alertes, comparer, cupNormalise, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe, imageGroupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
-import type { Reference, ScanAvecVisite } from "@/lib/types";
+import type { PromoCirculaire, Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
 import Promos from "./Promos";
@@ -31,6 +31,11 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
   const [scans, setScans] = useState<ScanAvecVisite[] | null>(null);
   const [refs, setRefs] = useState<Map<string, Reference>>(new Map());
   const [nbRefs, setNbRefs] = useState<number | null>(null);
+  const [promos, setPromos] = useState<PromoCirculaire[]>([]);
+  const chargerPromos = useCallback(async () => {
+    const { data } = await sb.from("promos_circulaires").select("*").order("ecart_pct", { ascending: true }).limit(1000);
+    setPromos(((data ?? []) as PromoCirculaire[]).filter((p) => !p.fin || Date.parse(p.fin) > Date.now()));
+  }, [sb]);
   const [erreur, setErreur] = useState("");
   const [recherche, setRecherche] = useState("");
   const [tous, setTous] = useState(false);
@@ -54,7 +59,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
     }
   }, [sb]);
 
-  useEffect(() => { charger(); compterRefs(); }, [charger, compterRefs]);
+  useEffect(() => { charger(); compterRefs(); chargerPromos(); }, [charger, compterRefs, chargerPromos]);
 
   const groupes = useMemo(() => grouper(scans ?? []), [scans]);
   const lignes = useMemo(() => comparer(groupes), [groupes]);
@@ -109,7 +114,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
         {puce("comparer", "Comparer")}
         {puce("tableau", "Tableau de bord")}
         {puce("variations", `Variations${changements.length ? ` (${changements.length})` : ""}`)}
-        {puce("alertes", `Alertes${depassements.length ? ` (${depassements.length})` : ""}`)}
+        {puce("alertes", `Alertes${depassements.length + promos.filter((p) => p.ecart_pct !== null && p.ecart_pct <= -seuil).length ? ` (${depassements.length + promos.filter((p) => p.ecart_pct !== null && p.ecart_pct <= -seuil).length})` : ""}`)}
         {puce("promos", "Circulaires")}
         {puce("reference", "Référence")}
       </div>
@@ -312,6 +317,8 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
         const visibles = depassements.filter((a) => correspond(a.groupe) && (!cetteVisite || a.obs.visite_id === visiteId));
         const vsRef = visibles.filter((a) => a.type === "reference");
         const entre = visibles.filter((a) => a.type === "bannieres");
+        const circulaires = promos.filter((p) => p.ecart_pct !== null && p.ecart_pct <= -seuil && (!cetteVisite || p.visite_id === visiteId)
+          && (!mots.length || mots.every((m) => normaliser([p.produit, p.marque, p.format, p.banniere].filter(Boolean).join(" ")).includes(m))));
         const enregistrerSeuil = () => {
           const v = parseFloat(seuilTexte.replace(",", "."));
           if (Number.isFinite(v) && v > 0 && v !== seuil) changerSeuil(Math.round(v * 10) / 10);
@@ -334,7 +341,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                 <button className={cetteVisite ? "on" : ""} onClick={() => setCetteVisite(true)}>Visite en cours</button>
               </div>
             )}
-            {!visibles.length && (
+            {!visibles.length && !circulaires.length && (
               <div className="card empty">
                 <IComparer />
                 <div>Aucun écart au-dessus de {String(seuil).replace(".", ",")} %.</div>
@@ -360,13 +367,31 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                 ))}
               </div>
             ))}
+            {circulaires.length > 0 && (
+              <div className="card">
+                <h2>Promos des circulaires ({circulaires.length})</h2>
+                {circulaires.map((p) => (
+                  <div key={p.id} className="tx" style={{ cursor: "default" }}>
+                    <PastilleBanniere banniere={p.banniere} doux />
+                    <div className="mid">
+                      <div className="t">{p.produit}</div>
+                      <div className="s">{[p.marque, p.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>
+                      <div className="s">{p.banniere} {argent(Number(p.prix))} · {p.source_prix ?? "Mon prix"} {argent(Number(p.mon_prix))}</div>
+                      <div className="s">{[p.verdict === "identique" ? "Identique" : "Proche, comparé par unité", p.fin ? `jusqu'au ${dateLisible(new Date(p.fin).toLocaleDateString("en-CA"))}` : null].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <div className="r"><b className="hausse">{pct(Number(p.ecart_pct))}</b><span className="muted">Flipp</span></div>
+                  </div>
+                ))}
+                <div className="astuce">Tirées de la dernière recherche dans « Circulaires » (source non officielle, à confirmer).</div>
+              </div>
+            )}
           </>
         );
       })()}
 
       {/* ---------- Promos des circulaires ---------- */}
       {vue === "promos" && scans !== null && (
-        <Promos groupes={groupes} refs={refs} visiteId={visiteId} seuil={seuil} codePostal={codePostal} changerCodePostal={changerCodePostal} lecture={lecture} historique={historique} refuse={refuse} />
+        <Promos enregistre={chargerPromos} groupes={groupes} refs={refs} visiteId={visiteId} seuil={seuil} codePostal={codePostal} changerCodePostal={changerCodePostal} lecture={lecture} historique={historique} refuse={refuse} />
       )}
 
       {/* ---------- Référence ---------- */}

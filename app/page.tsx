@@ -5,7 +5,7 @@ import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabas
 import { alertes, comparer, correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe, type LigneComparaison, imageGroupe } from "@/lib/comparaison";
 import { appliquerApparence, lireApparence, type Apparence } from "@/lib/apparence";
 import { filigraner } from "@/lib/filigrane";
-import { imageProduit } from "@/lib/image";
+import { imageParDescription, imageProduit } from "@/lib/image";
 import { ajouterPhoto, photosEnAttente, retirerPhoto, type PhotoEnAttente } from "@/lib/file";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { REGLAGES_DEFAUT, lireReglages, type Acces, type ListeNom, type ProduitListe, type Reference, type Reglages as TReglages, type Scan, type ScanAvecVisite, type Visite } from "@/lib/types";
@@ -232,6 +232,19 @@ function App({ refuse }: { refuse: () => void }) {
         if (!url || annule) continue;
         setScans((l) => l.map((x) => (x.cup === s.cup && !x.image_produit ? { ...x, image_produit: url } : x)));
         if (!lecture) sb.from("scans").update({ image_produit: url }).eq("visite_id", s.visite_id).eq("cup", s.cup!).is("image_produit", null).then(() => {});
+      }
+      // Sans code-barres : recherche par description exacte (marque, nom et format), quelques produits à la fois
+      const cle = (x: Scan) => `desc:${x.marque}|${x.produit}|${x.format}`;
+      for (const s of scans.filter((x) => !x.cup && !x.image_produit && x.marque && x.produit && !imagesEssayees.current.has(cle(x))).slice(0, 4)) {
+        if (annule || !navigator.onLine) return;
+        const url = await imageParDescription(s.produit, s.marque, s.format);
+        if (url === undefined) return; // service occupé : on réessaiera à la prochaine ouverture
+        imagesEssayees.current.add(cle(s));
+        if (url && !annule) {
+          setScans((l) => l.map((x) => (x.id === s.id ? { ...x, image_produit: url } : x)));
+          if (!lecture) sb.from("scans").update({ image_produit: url }).eq("id", s.id).then(() => {});
+        }
+        await new Promise((r) => setTimeout(r, 1500));
       }
     })();
     return () => { annule = true; };
