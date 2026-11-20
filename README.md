@@ -52,6 +52,10 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 - **Secours pour la lecture des photos** : si Claude ne répond pas (crédits épuisés, panne), la photo est lue par
   Gemini quand le secret GitHub `GEMINI_API_KEY` a été envoyé avec le flux « Enregistrer la clé de secours ».
 
+- **Circulaires** (onglet Analyse) : pour les produits de la visite, cherche les promos en cours chez les autres
+  bannières (recherche Flipp, non officielle), garde les produits comparables (jugés par Claude) et montre l'écart
+  avec le prix de référence ou le relevé. Ce sont des suggestions à confirmer ; rien n'est enregistré.
+
 ## Installation
 
 1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, définir le code d'accès (commande en

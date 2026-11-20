@@ -768,6 +768,7 @@ function App({ refuse }: { refuse: () => void }) {
       {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} listes={listes} listeId={listeId} choisir={setListeId} rechargerListes={chargerListes} lecture={lecture} />}
 
       {onglet === "comparer" && <Analyse key={`${vueAnalyse}-${version}`} historique={setHistorique} vueInitiale={vueAnalyse} visiteId={visite?.id ?? null} refuse={refuse}
+        codePostal={reglages.codePostal} changerCodePostal={(c) => { enregistrerReglages({ ...reglagesRef.current, codePostal: c }).then((e) => e && setErreur(e)); }}
         seuil={reglages.seuil} changerSeuil={(s) => { enregistrerReglages({ ...reglagesRef.current, seuil: s }).then((e) => e && setErreur(e)); }} lecture={lecture} />}
 
       {onglet === "assistant" && <Assistant visite={visite} modifie={() => { chargerScans(); chargerListe(); }} refuse={refuse} />}

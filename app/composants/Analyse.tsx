@@ -7,14 +7,17 @@ import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
+import Promos from "./Promos";
 import { IComparer, IRecherche, PastilleBanniere, argent, chargerReferences, chargerTout, dateLisible } from "./ui";
 
-export type VueAnalyse = "comparer" | "tableau" | "variations" | "alertes" | "reference";
+export type VueAnalyse = "comparer" | "tableau" | "variations" | "alertes" | "promos" | "reference";
 
 const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %`;
 
 /** Onglet Analyse : comparaison entre bannières, tableau de bord, variations de prix et prix de référence. */
-export default function Analyse({ historique, vueInitiale, visiteId, refuse, seuil, changerSeuil, lecture }: {
+export default function Analyse({ historique, vueInitiale, visiteId, refuse, seuil, changerSeuil, lecture, codePostal, changerCodePostal }: {
+  codePostal: string;
+  changerCodePostal: (c: string) => void;
   seuil: number;
   changerSeuil: (s: number) => void;
   lecture: boolean;
@@ -107,6 +110,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
         {puce("tableau", "Tableau de bord")}
         {puce("variations", `Variations${changements.length ? ` (${changements.length})` : ""}`)}
         {puce("alertes", `Alertes${depassements.length ? ` (${depassements.length})` : ""}`)}
+        {puce("promos", "Circulaires")}
         {puce("reference", "Référence")}
       </div>
 
@@ -359,6 +363,11 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
           </>
         );
       })()}
+
+      {/* ---------- Promos des circulaires ---------- */}
+      {vue === "promos" && scans !== null && (
+        <Promos groupes={groupes} refs={refs} visiteId={visiteId} seuil={seuil} codePostal={codePostal} changerCodePostal={changerCodePostal} lecture={lecture} historique={historique} refuse={refuse} />
+      )}
 
       {/* ---------- Référence ---------- */}
       {vue === "reference" && (
