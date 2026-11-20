@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
-import { correspond, grouper, normaliser, type Groupe } from "@/lib/comparaison";
+import { correspond, grouper, normaliser, type Groupe, imageGroupe } from "@/lib/comparaison";
 import type { ListeNom, ProduitListe, Scan, Visite } from "@/lib/types";
 import { ScannerCode } from "./Fenetres";
 import IconeProduit from "./IconeProduit";
@@ -239,7 +239,7 @@ function ChoixProduits({ liste, listeId, fermer, ajoutes }: { liste: ProduitList
           {visibles.map((g) => (
             <div key={g.id} className="tx" role="checkbox" aria-checked={coches.has(g.id)} onClick={() => basculer(g.id)}>
               <div className={`coche ${coches.has(g.id) ? "on" : ""}`}>{coches.has(g.id) && <ICoche />}</div>
-              <IconeProduit icone={g.icone} categorie={g.categorie} />
+              <IconeProduit icone={g.icone} categorie={g.categorie} image={imageGroupe(g)} />
               <div className="mid">
                 <div className="t">{g.nom}</div>
                 <div className="s">{[g.marque, g.format, g.cup ? `CUP ${g.cup}` : null].filter(Boolean).join(" · ") || "Aucun détail"}</div>

@@ -56,6 +56,9 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   bannières (recherche Flipp, non officielle), garde les produits comparables (jugés par Claude) et montre l'écart
   avec le prix de référence ou le relevé. Ce sont des suggestions à confirmer ; rien n'est enregistré.
 
+- **Photo du produit** : quand le code-barres est lu, l'image du vrai produit est cherchée dans Open Food Facts
+  (base ouverte) et remplace l'icône. Le CUP imprimé sans chiffre de contrôle est complété automatiquement.
+
 ## Installation
 
 1. **Supabase** : exécuter `supabase/schema.sql` dans le SQL Editor, définir le code d'accès (commande en

@@ -260,3 +260,6 @@ export function alertes(lignes: LigneComparaison[], reference: (cup: string | nu
   }
   return liste.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 }
+
+/** Image du produit d'un groupe : celle d'un de ses relevés, s'il y en a une. */
+export const imageGroupe = (g: Groupe): string | null => g.observations.find((o) => o.image_produit)?.image_produit ?? null;

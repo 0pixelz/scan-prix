@@ -533,3 +533,7 @@ header button.small.rond { padding: 0; width: 38px; min-width: 38px; justify-con
 :root[data-texte="tresgrand"] main, :root[data-texte="tresgrand"] .panel { zoom: 1.25; }
 .stats.quatre .stat small { overflow: hidden; text-overflow: ellipsis; }
 :root[data-texte="tresgrand"] .stats.quatre { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* ---------- Photo du vrai produit à la place de l'icône ---------- */
+.ic.produit { background: #fff; border: 1px solid var(--line); overflow: hidden; padding: 2px; }
+.ic.produit img { width: 100%; height: 100%; object-fit: contain; display: block; }

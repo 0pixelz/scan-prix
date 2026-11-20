@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
-import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
+import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type Groupe, imageGroupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
@@ -423,7 +423,7 @@ export function Historique({ groupe: initial, fermer, modifie, lecture }: { grou
             {!visibles.length && <div className="empty"><div>Aucun produit trouvé.</div></div>}
             {visibles.slice(0, 60).map((g) => (
               <div key={g.id} className="tx" role="button" onClick={() => !occupe && associer(g)}>
-                <IconeProduit icone={g.icone} categorie={g.categorie} />
+                <IconeProduit icone={g.icone} categorie={g.categorie} image={imageGroupe(g)} />
                 <div className="mid">
                   <div className="t">{g.nom}</div>
                   <div className="s">{[g.marque, g.format, [...new Set(g.observations.map((o) => o.visites?.banniere).filter(Boolean))].join(", ")].filter(Boolean).join(" · ") || "Aucun détail"}</div>

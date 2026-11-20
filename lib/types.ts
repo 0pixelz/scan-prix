@@ -33,6 +33,7 @@ export type Scan = {
   notes: string | null;
   photo_path: string | null;
   photo_prise_le: string | null;
+  image_produit?: string | null; // image du produit trouvée par son code-barres (Open Food Facts)
   groupe_manuel?: string | null; // produits associés à la main : même valeur = même produit
   source: string | null; // « circulaire » pour un prix lu sur une page de circulaire
   created_at: string;

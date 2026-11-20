@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
-import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
+import { cupNormalise, normaliser, prixEffectif, type Groupe, imageGroupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { Reference } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
@@ -158,7 +158,7 @@ export default function Promos({ groupes, refs, visiteId, seuil, codePostal, cha
           {lignes.map((p) => (
             <div className="card" key={p.groupe.id}>
               <div className="tx" role="button" style={{ paddingTop: 0 }} onClick={() => historique(p.groupe)}>
-                <IconeProduit icone={p.groupe.icone} categorie={p.groupe.categorie} />
+                <IconeProduit icone={p.groupe.icone} categorie={p.groupe.categorie} image={imageGroupe(p.groupe)} />
                 <div className="mid">
                   <div className="t">{p.groupe.nom}</div>
                   <div className="s">{[p.groupe.marque, p.groupe.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>

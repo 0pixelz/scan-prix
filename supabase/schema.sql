@@ -415,3 +415,6 @@ begin
   return r;
 end $$;
 revoke execute on function public.lire_cle_secours() from public, anon, authenticated;
+
+-- Image du produit (trouvée par son code-barres dans Open Food Facts), affichée à la place de l'icône.
+alter table public.scans add column if not exists image_produit text;

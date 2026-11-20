@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabase";
-import { alertes, comparer, correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe, type LigneComparaison } from "@/lib/comparaison";
+import { alertes, comparer, correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe, type LigneComparaison, imageGroupe } from "@/lib/comparaison";
 import { appliquerApparence, lireApparence, type Apparence } from "@/lib/apparence";
 import { filigraner } from "@/lib/filigrane";
+import { imageProduit } from "@/lib/image";
 import { ajouterPhoto, photosEnAttente, retirerPhoto, type PhotoEnAttente } from "@/lib/file";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { REGLAGES_DEFAUT, lireReglages, type Acces, type ListeNom, type ProduitListe, type Reference, type Reglages as TReglages, type Scan, type ScanAvecVisite, type Visite } from "@/lib/types";
@@ -218,6 +219,24 @@ function App({ refuse }: { refuse: () => void }) {
     chargerScans().finally(() => setChargement(false));
   }, [chargerScans, visite]);
   useEffect(() => { chargerListe(); }, [chargerListe]);
+
+  // Image du vrai produit, cherchée par code-barres pour les prix qui n'en ont pas encore (une seule fois par code).
+  const imagesEssayees = useRef(new Set<string>());
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      for (const s of scans.filter((x) => x.cup && !x.image_produit && !imagesEssayees.current.has(x.cup)).slice(0, 12)) {
+        if (annule || !navigator.onLine) return;
+        imagesEssayees.current.add(s.cup!);
+        const url = await imageProduit(s.cup);
+        if (!url || annule) continue;
+        setScans((l) => l.map((x) => (x.cup === s.cup && !x.image_produit ? { ...x, image_produit: url } : x)));
+        if (!lecture) sb.from("scans").update({ image_produit: url }).eq("visite_id", s.visite_id).eq("cup", s.cup!).is("image_produit", null).then(() => {});
+      }
+    })();
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sb, scans.length, visite?.id, lecture]);
 
   // Prix de référence des produits affichés (par CUP)
   const cups = useMemo(() => [...new Set(scans.map((s) => cupNormalise(s.cup)).filter(Boolean))].sort().join(","), [scans]);
@@ -544,7 +563,7 @@ function App({ refuse }: { refuse: () => void }) {
         gauche={lecture ? undefined : { libelle: "Supprimer", action: () => supprimerScan(s) }}
         droite={lecture || !incertain ? undefined : { libelle: "Vérifié", action: () => marquerVerifie(s) }}>
         <div className="tx" role="button" onClick={() => setEdition(s)}>
-          <IconeProduit icone={s.icone} categorie={s.categorie} />
+          <IconeProduit icone={s.icone} categorie={s.categorie} image={s.image_produit} />
           <div className="mid">
             <div className="t">{s.produit || "Produit non lu"}</div>
             <div className="s">{[s.marque, s.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>
@@ -745,7 +764,7 @@ function App({ refuse }: { refuse: () => void }) {
                     const bannieres = [...new Set(g.observations.map((o) => o.visites?.banniere).filter(Boolean))];
                     return (
                       <div key={g.id} className="tx" role="button" onClick={() => setHistorique(g)}>
-                        <IconeProduit icone={g.icone} categorie={g.categorie} />
+                        <IconeProduit icone={g.icone} categorie={g.categorie} image={imageGroupe(g)} />
                         <div className="mid">
                           <div className="t">{g.nom}</div>
                           <div className="s">{[g.marque, g.format].filter(Boolean).join(" · ") || "Aucun détail"}</div>
