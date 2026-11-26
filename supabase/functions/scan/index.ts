@@ -8,8 +8,9 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-jeton",
 };
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5";
-// Modèles du service de secours, essayés dans l'ordre (le suivant sert si le premier est refusé ou saturé).
-const MODELES_SECOURS = (Deno.env.get("GEMINI_MODELS") || "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite").split(",").map((m) => m.trim()).filter(Boolean);
+// Modèles Google essayés dans l'ordre, du plus précis au plus léger : le volet gratuit refuse souvent les plus
+// demandés (« high demand »), le suivant prend alors le relais.
+const MODELES_SECOURS = (Deno.env.get("GEMINI_MODELS") || "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-flash-lite-latest").split(",").map((m) => m.trim()).filter(Boolean);
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 
 const INTRO_CARTE = `Tu lis des photos de cartes de prix (étiquettes de tablette) prises en magasin au Québec.

@@ -448,3 +448,7 @@ begin
   return r;
 end $$;
 revoke execute on function public.lire_cle_images() from public, anon, authenticated;
+
+-- Clé Google (Gemini) : le format accepté a été élargi (points permis, espaces retirés), puis l'accès d'écriture
+-- a été retiré une fois la clé enregistrée.
+revoke execute on function public.definir_cle_secours(text) from public, anon, authenticated;
