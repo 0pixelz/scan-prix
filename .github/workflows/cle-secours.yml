@@ -1,6 +1,6 @@
 # Envoie la clé API Gemini (secret GitHub GEMINI_API_KEY) vers Supabase Vault.
 # Elle sert de secours pour lire les photos quand Claude n'est pas disponible.
-# La clé ne passe ni par le code ni par les journaux. (Format de clé élargi le 26 novembre.)
+# La clé ne passe ni par le code ni par les journaux. (Format de clé élargi le 26 novembre 2026.)
 name: Enregistrer la clé de secours
 
 on:
