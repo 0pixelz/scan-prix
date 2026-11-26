@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { configOk, ecrireJeton, jetonInvitation, lireJeton, ouvrirInvitation, supabaseBrowser } from "@/lib/supabase";
+import { adopterAppareil, configOk, ecrireJeton, jetonInvitation, lireJeton, oublierInvitation, ouvrirInvitation, preparerInstallation, supabaseBrowser } from "@/lib/supabase";
 import { alertes, comparer, correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe, type LigneComparaison } from "@/lib/comparaison";
 import { appliquerApparence, lireApparence, type Apparence } from "@/lib/apparence";
 import { filigraner } from "@/lib/filigrane";
@@ -51,19 +51,25 @@ export default function Page() {
       const attente = Math.max(0, 1100 - (Date.now() - debut));
       setTimeout(() => { if (!fini) setAcces(etat); }, attente);
     };
-    // Lien d'invitation (« …/#inv=… ») : ouvre l'app sans code. Le jeton est retiré de l'adresse aussitôt lu.
+    // Lien d'invitation (« …/#inv=… ») : ouvre l'app sans code, y compris depuis l'écran d'accueil.
     const invitation = jetonInvitation(window.location.hash);
-    if (invitation) history.replaceState(null, "", window.location.pathname + window.location.search);
+    adopterAppareil(window.location.hash);
     if (invitation && !lireJeton()) {
       ouvrirInvitation(invitation).then((r) => {
-        if (r !== "ok") setAvisCode(r === "bloque" ? "Trop d'essais. Réessaie dans 15 minutes." : r === "reseau" ? "Connexion impossible. Rouvre le lien quand tu as du réseau." : "Ce lien d'invitation n'est plus valide. Demande-en un nouveau.");
+        if (r === "ok") preparerInstallation();
+        else if (r === "invalide") history.replaceState(null, "", window.location.pathname + window.location.search);
+        if (r !== "ok") setAvisCode(r === "bloque" ? "Trop d'essais. Réessaie dans 15 minutes." : r === "reseau" ? "Connexion impossible. Rouvre le lien quand tu as du réseau." : "Ce lien d'invitation n'est plus actif. Demande-en un nouveau.");
         ouvrir(r === "ok" ? "ouvert" : "code");
       });
     } else if (!lireJeton()) ouvrir("code");
     else {
       supabaseBrowser().rpc("jeton_valide").then(({ data, error }) => {
         if (error) return ouvrir("ouvert"); // hors ligne : on laisse entrer, les données resteront protégées par le serveur
-        if (!data) ecrireJeton(null);
+        if (!data) {
+          ecrireJeton(null);
+          oublierInvitation();
+          if (invitation) history.replaceState(null, "", window.location.pathname + window.location.search);
+        } else preparerInstallation();
         ouvrir(data ? "ouvert" : "code");
       });
     }

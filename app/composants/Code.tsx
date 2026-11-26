@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cleAppareil, ecrireJeton, ouvrirInvitation, supabaseBrowser } from "@/lib/supabase";
+import { cleAppareil, ecrireJeton, ouvrirInvitation, preparerInstallation, supabaseBrowser } from "@/lib/supabase";
 import { IEffacer } from "./ui";
 
 /** Écran du code à 4 chiffres. Le code est vérifié par le serveur, qui remet un jeton gardé sur l'appareil. */
@@ -17,8 +17,8 @@ export default function Code({ ouvert, avis }: { ouvert: () => void; avis?: stri
     setMessage("");
     const r = await ouvrirInvitation(lien ?? "");
     setAttente(false);
-    if (r === "ok") return ouvert();
-    setMessage(r === "bloque" ? "Trop d'essais. Réessaie dans 15 minutes." : r === "reseau" ? "Connexion impossible. Vérifie ton réseau et réessaie." : "Lien d'invitation invalide ou expiré.");
+    if (r === "ok") return (preparerInstallation(), ouvert());
+    setMessage(r === "bloque" ? "Trop d'essais. Réessaie dans 15 minutes." : r === "reseau" ? "Connexion impossible. Vérifie ton réseau et réessaie." : "Lien d'invitation invalide ou retiré.");
   }
 
   async function verifier(c: string) {

@@ -116,8 +116,9 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
   }
   // Lien d'invitation : créé à la demande, affiché une seule fois (la base n'en garde que l'empreinte).
   const [lienPartage, setLienPartage] = useState("");
+  const [finLien, setFinLien] = useState<string | null>(null); // date d'expiration du lien créé (nul : sans expiration)
   const [creation, setCreation] = useState(false);
-  const textePartage = "Scan Prix : ouvre ce lien pour accéder à l'app (valide 7 jours). Si tu l'ajoutes à ton écran d'accueil, touche « J'ai un lien d'invitation » et colle ce même lien.";
+  const textePartage = "Scan Prix : ouvre ce lien pour accéder à l'app, sans code. Pour l'installer sur iPhone : ouvre-le dans Safari, touche Partager, puis « Sur l'écran d'accueil ».";
   async function creerLien() {
     setErreur("");
     setMessage("");
@@ -126,6 +127,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
     setCreation(false);
     if (error || !data?.ok) return setErreur(error?.message ?? "Seul le code principal peut partager l'application.");
     setLienPartage(`${window.location.origin}/#inv=${data.invitation}`);
+    setFinLien(typeof data.expire_le === "string" && data.expire_le !== "infinity" ? data.expire_le : null);
     rechargerAcces();
   }
   async function copierLien() {
@@ -374,8 +376,9 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
                 </div>
                 <div className="bloc">
                   <b>Partager l'application</b>
-                  <div className="muted">Crée un lien à envoyer par texto ou courriel. La personne qui l'ouvre entre sans code, avec un accès complet (relever, modifier, exporter) dans l'espace privé de son téléphone. Le lien est valide 7 jours et peut servir à plusieurs collègues.{acces.invitations ? ` ${acces.invitations} lien${acces.invitations > 1 ? "s actifs" : " actif"}.` : ""}</div>
+                  <div className="muted">Crée un lien à envoyer par texto ou courriel. La personne qui l'ouvre entre sans code, avec un accès complet (relever, modifier, exporter) dans l'espace privé de son téléphone : ses propres visites et photos. Elle peut aussi ajouter l'app à son écran d'accueil, toujours sans code. Un même lien peut servir à plusieurs collègues.{acces.invitations ? ` ${acces.invitations} lien${acces.invitations > 1 ? "s actifs" : " actif"}.` : ""}</div>
                   {lienPartage && <input className="lien-partage" readOnly value={lienPartage} onFocus={(e) => e.target.select()} aria-label="Lien d'invitation" />}
+                  {lienPartage && <div className="muted">{finLien ? `Ce lien est valide jusqu'au ${dateLisible(finLien.slice(0, 10))}.` : "Ce lien reste actif tant que tu ne retires pas l'accès des collègues."}</div>}
                   <div className="actions">
                     {lienPartage ? (
                       <>

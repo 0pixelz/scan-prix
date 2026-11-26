@@ -690,3 +690,15 @@ begin
   delete from prive.sessions where collegue;
   return jsonb_build_object('ok', true);
 end $$;
+
+-- Les liens d'invitation n'expirent pas : ils restent actifs jusqu'au retrait de l'accès des collègues.
+alter table prive.invitations alter column expire_le set default 'infinity';
+create or replace function public.creer_invitation()
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare j text;
+begin
+  if not prive.est_proprietaire() then return jsonb_build_object('ok', false, 'erreur', 'acces'); end if;
+  j := encode(extensions.gen_random_bytes(24), 'hex');
+  insert into prive.invitations (jeton_hash) values (encode(sha256(convert_to(j, 'UTF8')), 'hex'));
+  return jsonb_build_object('ok', true, 'invitation', j);
+end $$;

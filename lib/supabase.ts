@@ -60,9 +60,58 @@ export async function ouvrirInvitation(texte: string): Promise<"ok" | "invalide"
   if (error) return "reseau";
   if (data?.ok && data.jeton) {
     ecrireJeton(data.jeton);
+    try { localStorage.setItem(CLE_INVITATION, invitation); } catch { /* stockage indisponible */ }
     return "ok";
   }
   return data?.bloque ? "bloque" : "invalide";
+}
+
+// Invitation avec laquelle ce téléphone est entré : gardée pour que l'app ajoutée à l'écran d'accueil s'ouvre sans code.
+const CLE_INVITATION = "scanprix.invitation";
+
+/** Clé d'appareil transmise par l'adresse (« …&app=… ») : l'app de l'écran d'accueil reprend l'espace déjà utilisé dans le navigateur. */
+export function adopterAppareil(texte: string) {
+  const m = texte.match(/app=([a-f0-9]{48})/i);
+  if (!m) return;
+  try {
+    if (!localStorage.getItem(CLE_APPAREIL)) localStorage.setItem(CLE_APPAREIL, m[1].toLowerCase());
+  } catch {
+    /* stockage indisponible */
+  }
+}
+
+/**
+ * Pour un téléphone entré par invitation : l'adresse et le manifeste de l'app portent l'invitation et la clé
+ * d'appareil (après le « # », donc jamais envoyées au serveur). Ainsi, « Sur l'écran d'accueil » installe une app
+ * qui s'ouvre sans code, dans le même espace privé.
+ */
+export function preparerInstallation() {
+  try {
+    const invitation = localStorage.getItem(CLE_INVITATION);
+    const appareil = cleAppareil();
+    if (!invitation || !appareil) return;
+    const depart = `${window.location.origin}/#inv=${invitation}&app=${appareil}`;
+    if (window.location.href !== depart) history.replaceState(null, "", depart);
+    const manifeste = {
+      name: "Scan Prix", short_name: "Scan Prix", start_url: depart, scope: `${window.location.origin}/`, display: "standalone",
+      background_color: "#f1f5f9", theme_color: "#0f172a", lang: "fr-CA",
+      icons: [192, 512].map((t) => ({ src: `${window.location.origin}/icon-${t}.png`, sizes: `${t}x${t}`, type: "image/png" })),
+    };
+    let lien = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!lien) {
+      lien = document.createElement("link");
+      lien.rel = "manifest";
+      document.head.appendChild(lien);
+    }
+    lien.href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifeste))}`;
+  } catch {
+    /* sans stockage : l'app reste utilisable, sans installation préparée */
+  }
+}
+
+/** Oublie l'invitation de ce téléphone (accès retiré). */
+export function oublierInvitation() {
+  try { localStorage.removeItem(CLE_INVITATION); } catch { /* stockage indisponible */ }
 }
 
 let browserClient: SupabaseClient | null = null;
