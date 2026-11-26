@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ecrireJeton, supabaseBrowser } from "@/lib/supabase";
+import { cleAppareil, ecrireJeton, supabaseBrowser } from "@/lib/supabase";
 import { IEffacer } from "./ui";
 
 /** Écran du code à 4 chiffres. Le code est vérifié par le serveur, qui remet un jeton gardé sur l'appareil. */
@@ -13,7 +13,7 @@ export default function Code({ ouvert }: { ouvert: () => void }) {
   async function verifier(c: string) {
     setAttente(true);
     setMessage("");
-    const { data, error } = await supabaseBrowser().rpc("ouvrir_session", { code: c });
+    const { data, error } = await supabaseBrowser().rpc("ouvrir_session_appareil", { code: c, appareil: cleAppareil() });
     setAttente(false);
     if (error) return (setCode(""), setMessage("Connexion impossible. Vérifie ton réseau et réessaie."));
     if (data?.ok && data.jeton) {

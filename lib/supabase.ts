@@ -29,6 +29,23 @@ export function ecrireJeton(jeton: string | null) {
   }
 }
 
+// Clé de l'appareil : désigne l'espace privé de ce téléphone quand on entre avec le code collègue.
+// Créée une fois, gardée sur l'appareil, envoyée seulement à l'ouverture de session.
+const CLE_APPAREIL = "scanprix.appareil";
+export function cleAppareil(): string | null {
+  try {
+    let cle = localStorage.getItem(CLE_APPAREIL);
+    if (!cle || cle.length < 32) {
+      const octets = crypto.getRandomValues(new Uint8Array(24));
+      cle = Array.from(octets, (o) => o.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem(CLE_APPAREIL, cle);
+    }
+    return cle;
+  } catch {
+    return null; // stockage indisponible : pas d'espace privé possible
+  }
+}
+
 let browserClient: SupabaseClient | null = null;
 
 /** Client navigateur : chaque requête porte le jeton de session dans l'en-tête x-jeton. */

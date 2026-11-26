@@ -90,8 +90,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: role } = await sb.rpc("role_jeton", { jeton: req.headers.get("x-jeton") ?? "" });
+    const jeton = req.headers.get("x-jeton") ?? "";
+    const { data: role } = await sb.rpc("role_jeton", { jeton });
     if (!role) return json({ error: "Accès refusé. Entre ton code à nouveau.", acces: false });
+    // Données lues et écrites avec le jeton de l'utilisateur : chacun reste dans son espace (le code principal voit tout).
+    const bd = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { "x-jeton": jeton } } });
     // Accès en lecture seule : seuls les outils de consultation sont offerts.
     const lecture = role !== "complet";
     const outils = lecture ? OUTILS.filter((o) => ["lister_visites", "chercher_prix", "lister_liste"].includes(o.name)) : OUTILS;
@@ -108,7 +111,7 @@ Deno.serve(async (req) => {
 
     let visiteTexte = "aucune";
     if (body.visiteId) {
-      const { data: v } = await sb.from("visites").select("*").eq("id", body.visiteId).maybeSingle();
+      const { data: v } = await bd.from("visites").select("*").eq("id", body.visiteId).maybeSingle();
       if (v) visiteTexte = `${v.banniere}${v.magasin ? `, ${v.magasin}` : ""}, ${v.date_visite} (id ${v.id})`;
     }
 
@@ -151,11 +154,11 @@ Quand une photo est jointe :
       if (!outils.some((o) => o.name === nom)) return { erreur: "Action non permise avec un accès en lecture seule." };
       switch (nom) {
         case "lister_visites": {
-          const { data, error } = await sb.from("visites").select("id, banniere, magasin, date_visite").order("date_visite", { ascending: false }).limit(100);
+          const { data, error } = await bd.from("visites").select("id, banniere, magasin, date_visite").order("date_visite", { ascending: false }).limit(100);
           return error ? { erreur: error.message } : data;
         }
         case "chercher_prix": {
-          let q = sb
+          let q = bd
             .from("scans")
             .select("id, produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, prix_membre, points, points_details, date_debut, date_fin, cup, code_article, prix_unitaire, categorie, confiance, notes, visites!inner(id, banniere, magasin, date_visite)")
             .order("created_at", { ascending: false })
@@ -174,7 +177,7 @@ Quand une photo est jointe :
         case "ajouter_prix": {
           const visite_id = typeof a.visite_id === "string" ? a.visite_id : body.visiteId;
           if (!visite_id) return { erreur: "Aucune visite en cours." };
-          const { data, error } = await sb.from("scans").insert({ confiance: "haute", ...champs(), visite_id, photo_path: await photo() }).select("id").single();
+          const { data, error } = await bd.from("scans").insert({ confiance: "haute", ...champs(), visite_id, photo_path: await photo() }).select("id").single();
           if (error) return { erreur: error.message };
           modifie = true;
           return { ok: true, id: data.id };
@@ -182,34 +185,34 @@ Quand une photo est jointe :
         case "modifier_prix": {
           const maj = champs();
           if (!Object.keys(maj).length) return { erreur: "Aucun champ à modifier." };
-          const { data, error } = await sb.from("scans").update({ ...maj, confiance: "haute" }).eq("id", String(a.id)).select("id");
+          const { data, error } = await bd.from("scans").update({ ...maj, confiance: "haute" }).eq("id", String(a.id)).select("id");
           if (error) return { erreur: error.message };
           if (!data?.length) return { erreur: "Prix introuvable." };
           modifie = true;
           return { ok: true };
         }
         case "lister_liste": {
-          const { data, error } = await sb.from("liste_produits").select("id, nom, cup").order("created_at");
+          const { data, error } = await bd.from("liste_produits").select("id, nom, cup").order("created_at");
           return error ? { erreur: error.message } : data;
         }
         case "ajouter_a_liste": {
           const nom = typeof a.nom === "string" ? a.nom.trim() : "";
           if (!nom) return { erreur: "Nom manquant." };
           const cup = typeof a.cup === "string" ? a.cup.replace(/\D/g, "") || null : null;
-          const { error } = await sb.from("liste_produits").insert({ nom, cup });
+          const { error } = await bd.from("liste_produits").insert({ nom, cup });
           if (error) return { erreur: error.message };
           modifie = true;
           return { ok: true };
         }
         case "retirer_de_liste": {
-          const { data, error } = await sb.from("liste_produits").delete().eq("id", String(a.id)).select("id");
+          const { data, error } = await bd.from("liste_produits").delete().eq("id", String(a.id)).select("id");
           if (error) return { erreur: error.message };
           if (!data?.length) return { erreur: "Produit introuvable dans la liste." };
           modifie = true;
           return { ok: true };
         }
         case "supprimer_prix": {
-          const { data, error } = await sb.from("scans").delete().eq("id", String(a.id)).select("id");
+          const { data, error } = await bd.from("scans").delete().eq("id", String(a.id)).select("id");
           if (error) return { erreur: error.message };
           if (!data?.length) return { erreur: "Prix introuvable." };
           modifie = true;

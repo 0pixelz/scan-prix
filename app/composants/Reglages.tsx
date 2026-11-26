@@ -98,7 +98,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
 
   // ---------- Accès collègue ----------
   const [code, setCode] = useState("");
-  const [role, setRole] = useState<"lecture" | "complet">("lecture");
+  const role = "complet"; // chaque téléphone a son espace privé : un accès en lecture seule serait un espace vide
   const [retirer, setRetirer] = useState(false);
   async function definirCode(e: React.FormEvent) {
     e.preventDefault();
@@ -180,7 +180,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
     { section: "filigrane", icone: <ICamera />, etat: reglages.filigrane.actif ? `Activée${reglages.filigrane.nom ? ` · ${reglages.filigrane.nom}` : ""}` : "Désactivée" },
     { section: "circulaires", icone: <IAlerte />, etat: `${reglages.codePostal ? `Code postal ${reglages.codePostal}` : "Code postal à entrer"} · seuil ${String(reglages.seuil).replace(".", ",")} %` },
     { section: "cout", icone: <IAssistant />, etat: `Lecture par ${reglages.lecteur === "gemini" ? "Google (gratuit)" : "Claude"} · coût estimé du mois` },
-    { section: "acces", icone: <ICoche />, etat: !acces ? "…" : !acces.proprietaire ? (lecture ? "Tu es en lecture seule" : "Tu utilises un code collègue") : acces.collegue ? `Code actif · ${acces.collegue.role === "lecture" ? "lecture seule" : "accès complet"}` : "Aucun code collègue" },
+    { section: "acces", icone: <ICoche />, etat: !acces ? "…" : !acces.proprietaire ? "Espace privé de ce téléphone" : acces.collegue ? `Code actif · ${acces.espaces?.length ?? 0} téléphone${(acces.espaces?.length ?? 0) > 1 ? "s" : ""}` : "Aucun code collègue" },
     { section: "corbeille", icone: <IEffacer />, etat: nbCorbeille === null ? "…" : nbCorbeille ? `${nbCorbeille} élément${nbCorbeille > 1 ? "s" : ""} récupérable${nbCorbeille > 1 ? "s" : ""}` : "Vide" },
   ];
 
@@ -326,28 +326,24 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
             {!acces && <p className="muted">Chargement…</p>}
             {acces && !acces.proprietaire && (
               <div className="bloc">
-                <b>Tu utilises le code d'un collègue</b>
-                <div className="muted">{lecture ? "Accès en lecture seule : tu peux consulter les prix, les analyses et exporter, sans rien modifier." : "Accès complet : tu peux relever et modifier des prix."} Seul le code principal peut changer cet accès.</div>
+                <b>Tu utilises le code collègue</b>
+                <div className="muted">Ce téléphone a son propre espace : tu ne vois que tes visites, tes prix et tes listes, et les autres collègues ne voient pas les tiens. {lecture ? "Accès en lecture seule : tu ne peux rien ajouter. " : ""}Le code principal voit tout et gère les réglages.</div>
               </div>
             )}
             {acces?.proprietaire && (
               <>
                 <div className="bloc">
-                  <b>{acces.collegue ? `Un code collègue est actif (${acces.collegue.role === "lecture" ? "lecture seule" : "accès complet"})` : "Aucun code collègue"}</b>
+                  <b>{acces.collegue ? "Un code collègue est actif" : "Aucun code collègue"}</b>
                   <div className="muted">
                     {acces.collegue
-                      ? `Créé le ${momentLisible(acces.collegue.cree_le)}. Le collègue ouvre l'app avec son propre code, sans connaître le tien.`
-                      : "Crée un deuxième code à 4 chiffres pour un collègue. Tu peux le limiter à la lecture seule et le retirer à tout moment."}
+                      ? `Créé le ${momentLisible(acces.collegue.cree_le)}. ${acces.espaces?.length ? `${acces.espaces.length} téléphone${acces.espaces.length > 1 ? "s l'ont" : " l'a"} utilisé. ` : ""}`
+                      : "Crée un code à 4 chiffres à partager avec tes collègues, sans donner le tien. Tu peux le retirer à tout moment. "}
+                    Chaque téléphone qui entre ce code a son espace privé : un collègue ne voit que ses propres visites, prix et listes. Toi seul vois tout, avec la mention du collègue sur ses visites.
                   </div>
                 </div>
                 <form onSubmit={definirCode}>
                   <label>{acces.collegue ? "Nouveau code du collègue" : "Code du collègue"} (4 chiffres)</label>
                   <input value={code} inputMode="numeric" maxLength={4} autoComplete="off" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} placeholder="••••" />
-                  <label>Type d'accès</label>
-                  <select value={role} onChange={(e) => setRole(e.target.value as "lecture" | "complet")}>
-                    <option value="lecture">Lecture seule (consulter et exporter)</option>
-                    <option value="complet">Complet (relever et modifier)</option>
-                  </select>
                   <div className="actions">
                     <button className="primary full" disabled={code.length !== 4}>{acces.collegue ? "Remplacer le code" : "Créer le code"}</button>
                     {acces.collegue && (

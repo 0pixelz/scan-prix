@@ -422,11 +422,11 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
             </p>
             {message && <div className="alert info">{message}</div>}
             <div className="actions">
-              {!lecture && <label className={`bouton primary full ${envoi ? "inactif" : ""}`}>
+              {!fige && <label className={`bouton primary full ${envoi ? "inactif" : ""}`}>
                 {envoi ? "Import en cours…" : "Importer un fichier"}
                 <input type="file" accept=".xlsx,.csv,.txt" disabled={envoi} onChange={(e) => { importer(e.target.files); e.target.value = ""; }} />
               </label>}
-              {!lecture && nbRefs !== null && nbRefs > 0 && (
+              {!fige && nbRefs !== null && nbRefs > 0 && (
                 <button className="danger full" onClick={confirmerVider ? vider : () => setConfirmerVider(true)}>
                   {confirmerVider ? "Confirmer : effacer toute la liste" : "Vider la liste"}
                 </button>

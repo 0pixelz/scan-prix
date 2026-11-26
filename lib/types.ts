@@ -6,6 +6,7 @@ export type Visite = {
   latitude?: number | null;
   longitude?: number | null;
   created_at: string;
+  espace?: string | null; // téléphone d'un collègue (nul : code principal)
 };
 
 export type Scan = {
@@ -89,7 +90,7 @@ export function lireReglages(donnees: unknown): Reglages {
   };
 }
 
-export type Acces = { role: "complet" | "lecture" | null; proprietaire: boolean; collegue: { role: "complet" | "lecture"; cree_le: string } | null };
+export type Acces = { role: "complet" | "lecture" | null; proprietaire: boolean; espace?: boolean; espaces?: { id: string; numero: number }[] | null; collegue: { role: "complet" | "lecture"; cree_le: string } | null };
 
 export const CATEGORIES = [
   "Fruits et légumes",

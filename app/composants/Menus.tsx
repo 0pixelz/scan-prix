@@ -9,7 +9,7 @@ import { Fantomes } from "./Gestes";
 import { IExport, IJournal, IListe, IPlus, IRecherche, PastilleBanniere, argent, chargerTout, dateLisible } from "./ui";
 
 /** Choix de la visite en cours, ouvert depuis l'en-tête de n'importe quel onglet. */
-export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, fermer, lecture }: {
+export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, fermer, lecture, auteur }: {
   visites: Visite[];
   courante: Visite | null;
   choisir: (v: Visite) => void;
@@ -17,6 +17,7 @@ export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, ferme
   gerer: () => void;
   fermer: () => void;
   lecture: boolean;
+  auteur: (v: Visite) => string;
 }) {
   return (
     <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer()}>
@@ -33,7 +34,7 @@ export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, ferme
               <PastilleBanniere banniere={v.banniere} doux={v.id !== courante?.id} />
               <div className="mid">
                 <div className="t">{v.banniere}{v.magasin ? ` · ${v.magasin}` : ""}</div>
-                <div className="s">{dateLisible(v.date_visite)}{v.id === courante?.id ? " · en cours" : ""}</div>
+                <div className="s">{dateLisible(v.date_visite)}{v.id === courante?.id ? " · en cours" : ""}{auteur(v) ? ` · ${auteur(v)}` : ""}</div>
               </div>
             </div>
           ))}

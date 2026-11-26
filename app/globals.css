@@ -576,3 +576,7 @@ button.retour svg { width: 18px; height: 18px; transform: rotate(90deg); }
 .tuiles button.alerte b { color: var(--bad); }
 .sous-titre { margin: 14px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 main.reglages .card > h2 { margin-bottom: 4px; }
+
+/* Bouton « nouvelle visite » de l'en-tête : mis en évidence */
+header button.small.rond.plus { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { header button.small.rond.plus { color: #04201d; } }

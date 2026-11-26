@@ -462,3 +462,163 @@ $$;
 alter policy "reglages avec jeton" on public.reglages
   using ((select public.jeton_valide())) with check ((select public.jeton_proprietaire()));
 alter policy "suppression complet seulement" on public.reglages using ((select public.jeton_proprietaire()));
+
+-- ---------------------------------------------------------------------------------------------------------
+-- Espaces privés : chaque téléphone qui entre avec le code collègue a son propre espace (visites, prix, listes,
+-- promos, corbeille). Le code principal voit tout. Une ligne sans espace appartient au code principal.
+create table if not exists prive.espaces (
+  id uuid primary key default gen_random_uuid(),
+  cle_hash text not null unique,
+  numero int generated always as identity,
+  cree_le timestamptz not null default now()
+);
+alter table prive.sessions add column if not exists espace_id uuid references prive.espaces(id);
+
+create or replace function public.espace_courant()
+returns uuid language sql stable security definer set search_path = '' as $$
+  select espace_id from prive.sessions
+  where jeton_hash = encode(sha256(convert_to(coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'x-jeton', ''), 'UTF8')), 'hex')
+$$;
+
+alter table public.visites add column if not exists espace uuid;
+alter table public.scans add column if not exists espace uuid;
+alter table public.listes add column if not exists espace uuid;
+alter table public.liste_produits add column if not exists espace uuid;
+alter table public.promos_circulaires add column if not exists espace uuid;
+alter table public.corbeille add column if not exists espace uuid;
+alter table public.visites alter column espace set default public.espace_courant();
+alter table public.scans alter column espace set default public.espace_courant();
+alter table public.listes alter column espace set default public.espace_courant();
+alter table public.liste_produits alter column espace set default public.espace_courant();
+alter table public.promos_circulaires alter column espace set default public.espace_courant();
+alter table public.corbeille alter column espace set default public.espace_courant();
+create index if not exists visites_espace on public.visites (espace);
+create index if not exists scans_espace on public.scans (espace);
+
+-- Un prix suit toujours l'espace de sa visite, peu importe qui l'écrit (app, lecture de photo, assistant).
+create or replace function prive.espace_du_scan()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  new.espace := (select v.espace from public.visites v where v.id = new.visite_id);
+  return new;
+end $$;
+create or replace trigger scans_espace before insert or update on public.scans for each row execute function prive.espace_du_scan();
+
+alter policy "visites sans compte" on public.visites
+  using ((select public.jeton_valide()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())))
+  with check ((select public.jeton_ecriture()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())));
+alter policy "scans sans compte" on public.scans
+  using ((select public.jeton_valide()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())))
+  with check ((select public.jeton_ecriture()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())));
+alter policy "listes avec jeton" on public.listes
+  using ((select public.jeton_valide()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())))
+  with check ((select public.jeton_ecriture()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())));
+alter policy "liste avec jeton" on public.liste_produits
+  using ((select public.jeton_valide()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())))
+  with check ((select public.jeton_ecriture()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())));
+alter policy "promos avec jeton" on public.promos_circulaires
+  using ((select public.jeton_valide()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())))
+  with check ((select public.jeton_ecriture()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())));
+alter policy "corbeille en lecture" on public.corbeille
+  using ((select public.jeton_valide()) and ((select public.jeton_proprietaire()) or espace = (select public.espace_courant())));
+
+-- Les prix de référence restent visibles par tous, mais seul le code principal les importe ou les efface.
+alter policy "reference avec jeton" on public.reference_prix
+  using ((select public.jeton_valide())) with check ((select public.jeton_proprietaire()));
+alter policy "suppression complet seulement" on public.reference_prix using ((select public.jeton_proprietaire()));
+
+-- Ouverture de session : le téléphone d'un collègue envoie sa clé d'appareil, qui désigne son espace.
+-- (Remplace les versions plus haut.)
+create or replace function prive.ouvrir(code text, appareil text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare h text; j text; r text; c boolean := false; k record; e uuid;
+begin
+  if (select count(*) from prive.echecs where quand > now() - interval '15 minutes') >= 5 then
+    return jsonb_build_object('ok', false, 'bloque', true);
+  end if;
+  select code_hash into h from prive.acces where id = 1;
+  if h is not null and code is not null and extensions.crypt(code, h) = h then
+    r := 'complet';
+  else
+    select * into k from prive.codes where id = 1;
+    if found and code is not null and extensions.crypt(code, k.code_hash) = k.code_hash then
+      r := k.role;
+      c := true;
+    end if;
+  end if;
+  if r is null then
+    insert into prive.echecs default values;
+    return jsonb_build_object('ok', false, 'bloque', false);
+  end if;
+  if c and appareil is not null and length(appareil) between 32 and 128 and appareil ~ '^[A-Za-z0-9_-]+$' then
+    insert into prive.espaces (cle_hash) values (encode(sha256(convert_to(appareil, 'UTF8')), 'hex'))
+      on conflict (cle_hash) do update set cle_hash = excluded.cle_hash
+      returning id into e;
+  end if;
+  j := encode(extensions.gen_random_bytes(32), 'hex');
+  insert into prive.sessions (jeton_hash, role, collegue, espace_id) values (encode(sha256(convert_to(j, 'UTF8')), 'hex'), r, c, e);
+  return jsonb_build_object('ok', true, 'jeton', j, 'role', r);
+end $$;
+
+create or replace function public.ouvrir_session(code text)
+returns jsonb language sql security definer set search_path = '' as $$
+  select prive.ouvrir(code, null)
+$$;
+create or replace function public.ouvrir_session_appareil(code text, appareil text)
+returns jsonb language sql security definer set search_path = '' as $$
+  select prive.ouvrir(code, appareil)
+$$;
+
+create or replace function public.etat_acces()
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'role', public.jeton_role(),
+    'proprietaire', prive.est_proprietaire(),
+    'espace', public.espace_courant() is not null,
+    'espaces', case when prive.est_proprietaire() then (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'numero', numero) order by numero), '[]'::jsonb) from prive.espaces) end,
+    'collegue', case when prive.est_proprietaire() then (select jsonb_build_object('role', role, 'cree_le', cree_le) from prive.codes where id = 1) end
+  )
+$$;
+
+-- Corbeille : la copie garde l'espace de l'élément supprimé ; chacun ne récupère et ne vide que la sienne.
+create or replace function prive.vers_corbeille()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  insert into public.corbeille (type, objet_id, donnees, espace) values (tg_table_name, old.id, to_jsonb(old), old.espace);
+  return old;
+end $$;
+
+create or replace function public.restaurer(corbeille_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare c record; n int := 0;
+begin
+  if not public.jeton_ecriture() then return jsonb_build_object('ok', false, 'erreur', 'acces'); end if;
+  select * into c from public.corbeille where id = corbeille_id;
+  if not found or not coalesce(prive.est_proprietaire() or c.espace = public.espace_courant(), false) then
+    return jsonb_build_object('ok', false, 'erreur', 'introuvable');
+  end if;
+  if c.type = 'visites' then
+    insert into public.visites select * from jsonb_populate_record(null::public.visites, c.donnees);
+    insert into public.scans
+      select (jsonb_populate_record(null::public.scans, k.donnees)).* from public.corbeille k
+      where k.type = 'scans' and k.lot = c.lot and k.donnees ->> 'visite_id' = c.objet_id::text;
+    get diagnostics n = row_count;
+    delete from public.corbeille k where k.id = c.id or (k.type = 'scans' and k.lot = c.lot and k.donnees ->> 'visite_id' = c.objet_id::text);
+  else
+    if not exists (select 1 from public.visites v where v.id = (c.donnees ->> 'visite_id')::uuid) then
+      return jsonb_build_object('ok', false, 'erreur', 'visite');
+    end if;
+    insert into public.scans select * from jsonb_populate_record(null::public.scans, c.donnees);
+    delete from public.corbeille where id = c.id;
+    n := 1;
+  end if;
+  return jsonb_build_object('ok', true, 'prix', n);
+end $$;
+
+create or replace function public.vider_corbeille()
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.jeton_ecriture() then return jsonb_build_object('ok', false, 'erreur', 'acces'); end if;
+  delete from public.corbeille where coalesce(prive.est_proprietaire() or espace = public.espace_courant(), false);
+  return jsonb_build_object('ok', true);
+end $$;

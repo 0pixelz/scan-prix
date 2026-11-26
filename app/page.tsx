@@ -132,8 +132,14 @@ function App({ refuse }: { refuse: () => void }) {
 
   // Réglages (signature des photos, seuil d'alerte, tarifs) et type d'accès
   const chargerAcces = useCallback(() => {
-    sb.rpc("etat_acces").then(({ data }) => { if (data) setAcces(data as Acces); });
-  }, [sb]);
+    sb.rpc("etat_acces").then(({ data }) => {
+      if (!data) return;
+      const a = data as Acces;
+      // Session collègue sans espace privé (ouverte par une ancienne version) : on redemande le code.
+      if (a.role && !a.proprietaire && a.espace === false) return refuse();
+      setAcces(a);
+    });
+  }, [sb, refuse]);
   useEffect(() => {
     const cache = lireCache<unknown>("scanprix.reglages");
     if (cache) setReglages(lireReglages(cache));
@@ -603,6 +609,12 @@ function App({ refuse }: { refuse: () => void }) {
       </Glissable>
     );
   };
+  // Pour le code principal : de quel téléphone vient une visite faite par un collègue.
+  const auteur = (v: Visite) => {
+    if (!v.espace || !acces?.proprietaire) return "";
+    const e = acces.espaces?.find((x) => x.id === v.espace);
+    return e ? `Collègue ${e.numero}` : "Collègue";
+  };
   const titres: Record<Onglet, string> = { scan: "Scan Prix", liste: "Liste", comparer: "Analyse", plus: "Plus", assistant: "Assistant", visites: "Visites", reglages: "Réglages" };
   const sousPage = onglet === "assistant" || onglet === "visites" || onglet === "reglages"; // pages ouvertes depuis « Plus »
   const allerReglages = (section: Section | null) => { setOuvrirReglages(section); setOnglet("reglages"); };
@@ -626,6 +638,7 @@ function App({ refuse }: { refuse: () => void }) {
               <IChevron />
             </button>
           )}
+          {!sousPage && onglet !== "plus" && !lecture && <button className="small rond plus" aria-label="Nouvelle visite" onClick={() => setNouvelle(true)}><IPlus /></button>}
           {onglet === "visites" && !lecture && <button className="small" onClick={() => setNouvelle(true)}><IPlus /> Nouvelle</button>}
           {!sousPage && <button className="small rond" aria-label="Rechercher partout" onClick={() => setMenu("recherche")}><IRecherche /></button>}
           {(onglet === "scan" || onglet === "comparer") && (
@@ -830,7 +843,7 @@ function App({ refuse }: { refuse: () => void }) {
                 <PastilleBanniere banniere={v.banniere} doux={v.id !== visite?.id} />
                 <div className="mid">
                   <div className="t">{v.banniere}{v.magasin ? ` · ${v.magasin}` : ""}</div>
-                  <div className="s">{dateLisible(v.date_visite)}{v.id === visite?.id ? " · en cours" : ""}</div>
+                  <div className="s">{dateLisible(v.date_visite)}{v.id === visite?.id ? " · en cours" : ""}{auteur(v) ? ` · ${auteur(v)}` : ""}</div>
                 </div>
                 {!lecture && <button className="ghost icone" aria-label={`Modifier la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); setModifVisite(v); }}><ICrayon /></button>}
                 <button className="small" disabled={rapportEnCours} aria-label={`Rapport de la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); rapport(v); }}>
@@ -884,7 +897,7 @@ function App({ refuse }: { refuse: () => void }) {
       )}
 
       {menu === "visite" && (
-        <ChoixVisite visites={visites} courante={visite} lecture={lecture} fermer={() => setMenu(null)}
+        <ChoixVisite visites={visites} courante={visite} lecture={lecture} auteur={auteur} fermer={() => setMenu(null)}
           choisir={(v) => { setVisite(v); setMenu(null); }}
           nouvelle={() => { setMenu(null); setNouvelle(true); }}
           gerer={() => { setMenu(null); setOnglet("visites"); }} />
