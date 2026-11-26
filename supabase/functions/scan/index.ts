@@ -8,9 +8,9 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-jeton",
 };
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5";
-// Modèles Google essayés dans l'ordre, du plus précis au plus léger : le volet gratuit refuse souvent les plus
-// demandés (« high demand »), le suivant prend alors le relais.
-const MODELES_SECOURS = (Deno.env.get("GEMINI_MODELS") || "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-flash-lite-latest").split(",").map((m) => m.trim()).filter(Boolean);
+// Modèles Google essayés dans l'ordre, les légers d'abord : ils répondent en 1 à 2 secondes, alors que le volet
+// gratuit refuse souvent les plus demandés (« high demand »). Un modèle qui refuse ou tarde laisse la place au suivant.
+const MODELES_SECOURS = (Deno.env.get("GEMINI_MODELS") || "gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash,gemini-3.6-flash").split(",").map((m) => m.trim()).filter(Boolean);
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 
 const INTRO_CARTE = `Tu lis des photos de cartes de prix (étiquettes de tablette) prises en magasin au Québec.
@@ -118,13 +118,18 @@ async function lireSecours(cle: string, base64: string, circulaire: boolean): Pr
   for (const modele of MODELES_SECOURS) {
     const rep = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent`, {
       method: "POST",
+      signal: AbortSignal.timeout(circulaire ? 40000 : 12000),
       headers: { "x-goog-api-key": cle, "content-type": "application/json" },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: `${circulaire ? INTRO_CIRCULAIRE : INTRO_CARTE}\n${REGLES}\n${FIN_SECOURS}` }] },
         contents: [{ role: "user", parts: [{ inlineData: { mimeType: "image/jpeg", data: base64 } }, { text: consigne(circulaire) }] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: circulaire ? 8000 : 3000 },
       }),
-    });
+    }).catch(() => null);
+    if (!rep) {
+      derniere = "pas de réponse à temps";
+      continue;
+    }
     const msg = await rep.json().catch(() => ({}));
     if (!rep.ok) {
       derniere = msg?.error?.message ?? `erreur ${rep.status}`;
