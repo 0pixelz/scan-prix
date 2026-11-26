@@ -580,3 +580,9 @@ main.reglages .card > h2 { margin-bottom: 4px; }
 /* Bouton « nouvelle visite » de l'en-tête : mis en évidence */
 header button.small.rond.plus { background: var(--accent); border-color: var(--accent); color: #fff; }
 @media (prefers-color-scheme: dark) { header button.small.rond.plus { color: #04201d; } }
+
+/* Lien d'invitation */
+.lien-invitation { margin-top: 18px; width: 100%; }
+form.lien-invitation { display: flex; gap: 8px; }
+form.lien-invitation input { flex: 1; min-width: 0; }
+input.lien-partage { margin-top: 10px; font-size: 13px; }

@@ -123,6 +123,7 @@ export const IEnvoyer = () => <Icone d={["M12 19V5", "M6 11l6-6 6 6"]} />;
 export const IPlus = () => <Icone d={["M12 5v14", "M5 12h14"]} />;
 export const IPhotos = () => <Icone d={["M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z", "M3 16l5-5 4 4 3-3 6 6", "M15.5 9.5h.01"]} />;
 export const IFermer = () => <Icone d={["M6 6l12 12", "M18 6L6 18"]} />;
+export const IPartage = () => <Icone d={["M12 15V4", "M7.5 8.5L12 4l4.5 4.5", "M5 13v6h14v-6"]} />;
 export const IExport = () => <Icone d={["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M5 20h14"]} />;
 export const IRecherche = () => <Icone d={["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "M20 20l-3.8-3.8"]} />;
 export const ICodeBarres = () => <Icone d={["M4 6v12", "M7.5 6v12", "M10.5 6v12", "M14 6v12", "M17 6v12", "M20 6v12"]} />;

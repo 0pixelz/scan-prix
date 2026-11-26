@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { configOk, ecrireJeton, lireJeton, supabaseBrowser } from "@/lib/supabase";
+import { configOk, ecrireJeton, jetonInvitation, lireJeton, ouvrirInvitation, supabaseBrowser } from "@/lib/supabase";
 import { alertes, comparer, correspond, cupNormalise, doublons, grouper, normaliser, prixEffectif, promoUnitaire, variations, type Groupe, type LigneComparaison } from "@/lib/comparaison";
 import { appliquerApparence, lireApparence, type Apparence } from "@/lib/apparence";
 import { filigraner } from "@/lib/filigrane";
@@ -22,7 +22,7 @@ import Liste from "./composants/Liste";
 import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
-  IAssistant, ICamera, IComparer, ICrayon, IEffacer, IPlusMenu, IReglages, IEtiquette, IExport, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  IAssistant, ICamera, IComparer, ICrayon, IEffacer, IPlusMenu, IReglages, IEtiquette, IExport, IPartage, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
   PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
 } from "./composants/ui";
 
@@ -31,6 +31,7 @@ type Filtre = "tous" | "promos" | "verifier" | "doublons";
 
 export default function Page() {
   const [acces, setAcces] = useState<"verification" | "code" | "ouvert">("verification");
+  const [avisCode, setAvisCode] = useState(""); // message affiché à l'écran du code (lien d'invitation refusé)
 
   // Thème et taille du texte choisis sur cet appareil, appliqués avant le premier affichage
   useLayoutEffect(() => { appliquerApparence(lireApparence(), false); }, []);
@@ -50,7 +51,15 @@ export default function Page() {
       const attente = Math.max(0, 1100 - (Date.now() - debut));
       setTimeout(() => { if (!fini) setAcces(etat); }, attente);
     };
-    if (!lireJeton()) ouvrir("code");
+    // Lien d'invitation (« …/#inv=… ») : ouvre l'app sans code. Le jeton est retiré de l'adresse aussitôt lu.
+    const invitation = jetonInvitation(window.location.hash);
+    if (invitation) history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (invitation && !lireJeton()) {
+      ouvrirInvitation(invitation).then((r) => {
+        if (r !== "ok") setAvisCode(r === "bloque" ? "Trop d'essais. Réessaie dans 15 minutes." : r === "reseau" ? "Connexion impossible. Rouvre le lien quand tu as du réseau." : "Ce lien d'invitation n'est plus valide. Demande-en un nouveau.");
+        ouvrir(r === "ok" ? "ouvert" : "code");
+      });
+    } else if (!lireJeton()) ouvrir("code");
     else {
       supabaseBrowser().rpc("jeton_valide").then(({ data, error }) => {
         if (error) return ouvrir("ouvert"); // hors ligne : on laisse entrer, les données resteront protégées par le serveur
@@ -61,7 +70,7 @@ export default function Page() {
     return () => { fini = true; };
   }, []);
 
-  const refuse = useCallback(() => { ecrireJeton(null); setAcces("code"); }, []);
+  const refuse = useCallback(() => { ecrireJeton(null); setAvisCode(""); setAcces("code"); }, []);
 
   if (!configOk)
     return (
@@ -71,7 +80,7 @@ export default function Page() {
       </div>
     );
   if (acces === "verification") return <Demarrage />;
-  if (acces === "code") return <Code ouvert={() => setAcces("ouvert")} />;
+  if (acces === "code") return <Code ouvert={() => setAcces("ouvert")} avis={avisCode} />;
   return <App refuse={refuse} />;
 }
 
@@ -866,6 +875,7 @@ function App({ refuse }: { refuse: () => void }) {
               { cle: "assistant", icone: <IAssistant />, titre: "Assistant", detail: "Pose une question sur tes prix ou fais ajouter un relevé", action: () => setOnglet("assistant") },
               { cle: "visites", icone: <IMagasin />, titre: "Visites", detail: `${visites.length} visite${visites.length > 1 ? "s" : ""}${visite ? ` · en cours : ${[visite.banniere, visite.magasin].filter(Boolean).join(" · ")}` : ""}`, action: () => setOnglet("visites") },
               { cle: "reglages", icone: <IReglages />, titre: "Réglages", detail: "Apparence, signature des photos, circulaires, accès collègue", action: () => allerReglages(null) },
+              ...(acces?.proprietaire ? [{ cle: "partager", icone: <IPartage />, titre: "Partager l'application", detail: "Lien d'invitation pour un collègue : accès complet, espace privé", action: () => allerReglages("acces") }] : []),
               { cle: "corbeille", icone: <IEffacer />, titre: "Corbeille", detail: "Prix et visites supprimés, récupérables 30 jours", action: () => allerReglages("corbeille") },
               { cle: "export", icone: <IExport />, titre: "Exporter toutes les visites", detail: exportEnCours ? "Préparation du fichier…" : "Un fichier Excel avec tous tes relevés", action: () => !exportEnCours && exporter(null) },
             ]).map((l) => (

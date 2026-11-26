@@ -622,3 +622,71 @@ begin
   delete from public.corbeille where coalesce(prive.est_proprietaire() or espace = public.espace_courant(), false);
   return jsonb_build_object('ok', true);
 end $$;
+
+-- ---------------------------------------------------------------------------------------------------------
+-- Liens d'invitation : « Partager l'application » crée un lien qui ouvre une session collègue (accès complet,
+-- espace privé du téléphone) sans code à taper. Seul le hash du jeton est gardé. Valide 7 jours.
+create table if not exists prive.invitations (
+  id uuid primary key default gen_random_uuid(),
+  jeton_hash text not null unique,
+  cree_le timestamptz not null default now(),
+  expire_le timestamptz not null default now() + interval '7 days'
+);
+
+create or replace function public.creer_invitation()
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare j text; x timestamptz;
+begin
+  if not prive.est_proprietaire() then return jsonb_build_object('ok', false, 'erreur', 'acces'); end if;
+  j := encode(extensions.gen_random_bytes(24), 'hex');
+  insert into prive.invitations (jeton_hash) values (encode(sha256(convert_to(j, 'UTF8')), 'hex')) returning expire_le into x;
+  return jsonb_build_object('ok', true, 'invitation', j, 'expire_le', x);
+end $$;
+
+create or replace function public.ouvrir_invitation(invitation text, appareil text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare j text; e uuid;
+begin
+  if (select count(*) from prive.echecs where quand > now() - interval '15 minutes') >= 5 then
+    return jsonb_build_object('ok', false, 'bloque', true);
+  end if;
+  if appareil is null or length(appareil) not between 32 and 128 or appareil !~ '^[A-Za-z0-9_-]+$' then
+    return jsonb_build_object('ok', false, 'erreur', 'appareil');
+  end if;
+  if invitation is null or not exists (
+    select 1 from prive.invitations where jeton_hash = encode(sha256(convert_to(invitation, 'UTF8')), 'hex') and expire_le > now()
+  ) then
+    insert into prive.echecs default values;
+    return jsonb_build_object('ok', false, 'bloque', false);
+  end if;
+  insert into prive.espaces (cle_hash) values (encode(sha256(convert_to(appareil, 'UTF8')), 'hex'))
+    on conflict (cle_hash) do update set cle_hash = excluded.cle_hash
+    returning id into e;
+  j := encode(extensions.gen_random_bytes(32), 'hex');
+  insert into prive.sessions (jeton_hash, role, collegue, espace_id) values (encode(sha256(convert_to(j, 'UTF8')), 'hex'), 'complet', true, e);
+  return jsonb_build_object('ok', true, 'jeton', j, 'role', 'complet');
+end $$;
+
+-- (Remplace la version plus haut.)
+create or replace function public.etat_acces()
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'role', public.jeton_role(),
+    'proprietaire', prive.est_proprietaire(),
+    'espace', public.espace_courant() is not null,
+    'espaces', case when prive.est_proprietaire() then (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'numero', numero) order by numero), '[]'::jsonb) from prive.espaces) end,
+    'invitations', case when prive.est_proprietaire() then (select count(*) from prive.invitations where expire_le > now()) end,
+    'collegue', case when prive.est_proprietaire() then (select jsonb_build_object('role', role, 'cree_le', cree_le) from prive.codes where id = 1) end
+  )
+$$;
+
+-- Retirer l'accès des collègues : le code, les liens d'invitation et toutes leurs sessions.
+create or replace function public.retirer_code_collegue()
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  if not prive.est_proprietaire() then return jsonb_build_object('ok', false, 'erreur', 'acces'); end if;
+  delete from prive.codes where id = 1;
+  delete from prive.invitations where true;
+  delete from prive.sessions where collegue;
+  return jsonb_build_object('ok', true);
+end $$;

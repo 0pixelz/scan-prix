@@ -90,7 +90,7 @@ export function lireReglages(donnees: unknown): Reglages {
   };
 }
 
-export type Acces = { role: "complet" | "lecture" | null; proprietaire: boolean; espace?: boolean; espaces?: { id: string; numero: number }[] | null; collegue: { role: "complet" | "lecture"; cree_le: string } | null };
+export type Acces = { role: "complet" | "lecture" | null; proprietaire: boolean; espace?: boolean; espaces?: { id: string; numero: number }[] | null; invitations?: number | null; collegue: { role: "complet" | "lecture"; cree_le: string } | null };
 
 export const CATEGORIES = [
   "Fruits et légumes",

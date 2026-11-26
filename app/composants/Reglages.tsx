@@ -5,12 +5,12 @@ import { supabaseBrowser } from "@/lib/supabase";
 import { lignesFiligrane } from "@/lib/filigrane";
 import type { Acces, Reglages as TReglages, Visite } from "@/lib/types";
 import type { Apparence } from "@/lib/apparence";
-import { IAlerte, IAssistant, ICamera, IChevron, ICoche, IEffacer, IEtiquette, IMagasin, IReglages, IRestaurer, argent, dateLisible, momentLisible } from "./ui";
+import { IAlerte, IAssistant, ICamera, IChevron, ICoche, IEffacer, IEtiquette, IPartage, IMagasin, IReglages, IRestaurer, argent, dateLisible, momentLisible } from "./ui";
 
 export type Section = "apparence" | "filigrane" | "circulaires" | "cout" | "acces" | "corbeille";
 const TITRES: Record<Section, string> = {
   apparence: "Apparence", filigrane: "Signature des photos", circulaires: "Circulaires et alertes",
-  cout: "Lecture des photos et coût", acces: "Accès collègue", corbeille: "Corbeille",
+  cout: "Lecture des photos et coût", acces: "Partage et accès collègue", corbeille: "Corbeille",
 };
 type Jete = { id: string; type: "visites" | "scans"; objet_id: string; donnees: Record<string, unknown>; lot: number; supprime_le: string };
 type Usage = { quand: string; fonction: string; modele: string; entree: number; sortie: number; photos: number };
@@ -114,11 +114,42 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
     setMessage("Code du collègue enregistré. Donne-lui ce code de vive voix : il n'est affiché nulle part.");
     rechargerAcces();
   }
+  // Lien d'invitation : créé à la demande, affiché une seule fois (la base n'en garde que l'empreinte).
+  const [lienPartage, setLienPartage] = useState("");
+  const [creation, setCreation] = useState(false);
+  const textePartage = "Scan Prix : ouvre ce lien pour accéder à l'app (valide 7 jours). Si tu l'ajoutes à ton écran d'accueil, touche « J'ai un lien d'invitation » et colle ce même lien.";
+  async function creerLien() {
+    setErreur("");
+    setMessage("");
+    setCreation(true);
+    const { data, error } = await sb.rpc("creer_invitation");
+    setCreation(false);
+    if (error || !data?.ok) return setErreur(error?.message ?? "Seul le code principal peut partager l'application.");
+    setLienPartage(`${window.location.origin}/#inv=${data.invitation}`);
+    rechargerAcces();
+  }
+  async function copierLien() {
+    try {
+      await navigator.clipboard.writeText(lienPartage);
+      setMessage("Lien copié. Colle-le dans un message à ton collègue.");
+    } catch {
+      setErreur("Copie impossible : sélectionne le lien et copie-le à la main.");
+    }
+  }
+  async function partagerLien() {
+    if (!navigator.share) return copierLien();
+    try {
+      await navigator.share({ title: "Scan Prix", text: textePartage, url: lienPartage });
+    } catch {
+      /* partage annulé */
+    }
+  }
   async function retirerCode() {
     const { data, error } = await sb.rpc("retirer_code_collegue");
     if (error || !data?.ok) return setErreur(error?.message ?? "Retrait refusé.");
     setRetirer(false);
-    setMessage("Accès du collègue retiré. Ses appareils sont déconnectés.");
+    setLienPartage("");
+    setMessage("Accès des collègues retiré : code et liens annulés, leurs appareils sont déconnectés.");
     rechargerAcces();
   }
 
@@ -180,7 +211,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
     { section: "filigrane", icone: <ICamera />, etat: reglages.filigrane.actif ? `Activée${reglages.filigrane.nom ? ` · ${reglages.filigrane.nom}` : ""}` : "Désactivée" },
     { section: "circulaires", icone: <IAlerte />, etat: `${reglages.codePostal ? `Code postal ${reglages.codePostal}` : "Code postal à entrer"} · seuil ${String(reglages.seuil).replace(".", ",")} %` },
     { section: "cout", icone: <IAssistant />, etat: `Lecture par ${reglages.lecteur === "gemini" ? "Google (gratuit)" : "Claude"} · coût estimé du mois` },
-    { section: "acces", icone: <ICoche />, etat: !acces ? "…" : !acces.proprietaire ? "Espace privé de ce téléphone" : acces.collegue ? `Code actif · ${acces.espaces?.length ?? 0} téléphone${(acces.espaces?.length ?? 0) > 1 ? "s" : ""}` : "Aucun code collègue" },
+    { section: "acces", icone: <ICoche />, etat: !acces ? "…" : !acces.proprietaire ? "Espace privé de ce téléphone" : acces.collegue || acces.invitations ? `${acces.collegue ? "Code actif" : "Lien actif"} · ${acces.espaces?.length ?? 0} téléphone${(acces.espaces?.length ?? 0) > 1 ? "s" : ""}` : "Partager l'application" },
     { section: "corbeille", icone: <IEffacer />, etat: nbCorbeille === null ? "…" : nbCorbeille ? `${nbCorbeille} élément${nbCorbeille > 1 ? "s" : ""} récupérable${nbCorbeille > 1 ? "s" : ""}` : "Vide" },
   ];
 
@@ -341,14 +372,29 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
                     Chaque téléphone qui entre ce code a son espace privé : un collègue ne voit que ses propres visites, prix et listes. Toi seul vois tout, avec la mention du collègue sur ses visites.
                   </div>
                 </div>
+                <div className="bloc">
+                  <b>Partager l'application</b>
+                  <div className="muted">Crée un lien à envoyer par texto ou courriel. La personne qui l'ouvre entre sans code, avec un accès complet (relever, modifier, exporter) dans l'espace privé de son téléphone. Le lien est valide 7 jours et peut servir à plusieurs collègues.{acces.invitations ? ` ${acces.invitations} lien${acces.invitations > 1 ? "s actifs" : " actif"}.` : ""}</div>
+                  {lienPartage && <input className="lien-partage" readOnly value={lienPartage} onFocus={(e) => e.target.select()} aria-label="Lien d'invitation" />}
+                  <div className="actions">
+                    {lienPartage ? (
+                      <>
+                        <button type="button" className="primary full" onClick={partagerLien}><IPartage /> Partager le lien</button>
+                        <button type="button" className="full" onClick={copierLien}>Copier le lien</button>
+                      </>
+                    ) : (
+                      <button type="button" className="primary full" disabled={creation} onClick={creerLien}>{creation ? "Création…" : "Créer un lien de partage"}</button>
+                    )}
+                  </div>
+                </div>
                 <form onSubmit={definirCode}>
                   <label>{acces.collegue ? "Nouveau code du collègue" : "Code du collègue"} (4 chiffres)</label>
                   <input value={code} inputMode="numeric" maxLength={4} autoComplete="off" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} placeholder="••••" />
                   <div className="actions">
                     <button className="primary full" disabled={code.length !== 4}>{acces.collegue ? "Remplacer le code" : "Créer le code"}</button>
-                    {acces.collegue && (
+                    {(acces.collegue || !!acces.invitations || !!acces.espaces?.length) && (
                       <button type="button" className="danger full" onClick={retirer ? retirerCode : () => setRetirer(true)}>
-                        {retirer ? "Confirmer : retirer l'accès du collègue" : "Retirer l'accès du collègue"}
+                        {retirer ? "Confirmer : retirer l'accès des collègues" : "Retirer l'accès des collègues (code et liens)"}
                       </button>
                     )}
                   </div>

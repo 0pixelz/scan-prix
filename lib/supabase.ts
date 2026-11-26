@@ -46,6 +46,25 @@ export function cleAppareil(): string | null {
   }
 }
 
+/** Jeton d'un lien d'invitation (« …/#inv=… »), ou d'un jeton collé seul. */
+export function jetonInvitation(texte: string): string | null {
+  const m = texte.match(/inv=([a-f0-9]{48})/i) ?? texte.trim().match(/^([a-f0-9]{48})$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/** Ouvre une session à partir d'un lien d'invitation : accès complet, dans l'espace privé de ce téléphone. */
+export async function ouvrirInvitation(texte: string): Promise<"ok" | "invalide" | "bloque" | "reseau"> {
+  const invitation = jetonInvitation(texte);
+  if (!invitation) return "invalide";
+  const { data, error } = await supabaseBrowser().rpc("ouvrir_invitation", { invitation, appareil: cleAppareil() });
+  if (error) return "reseau";
+  if (data?.ok && data.jeton) {
+    ecrireJeton(data.jeton);
+    return "ok";
+  }
+  return data?.bloque ? "bloque" : "invalide";
+}
+
 let browserClient: SupabaseClient | null = null;
 
 /** Client navigateur : chaque requête porte le jeton de session dans l'en-tête x-jeton. */
