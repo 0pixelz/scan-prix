@@ -63,13 +63,14 @@ export type Filigrane = { actif: boolean; logo: boolean; nom: string; poste: str
 /** Tarifs Claude en dollars US par million de jetons, pour estimer le coût. */
 export type Tarifs = { sonnetEntree: number; sonnetSortie: number; haikuEntree: number; haikuSortie: number };
 
-export type Reglages = { filigrane: Filigrane; seuil: number; tarifs: Tarifs; codePostal: string }; // code postal : région des circulaires
+export type Reglages = { filigrane: Filigrane; seuil: number; tarifs: Tarifs; codePostal: string; lecteur: "claude" | "gemini" }; // lecteur : qui lit les photos en premier // code postal : région des circulaires
 
 export const REGLAGES_DEFAUT: Reglages = {
   filigrane: { actif: false, logo: true, nom: "", poste: "", lieu: false, opacite: 90 },
   seuil: 5,
   tarifs: { sonnetEntree: 2, sonnetSortie: 10, haikuEntree: 0.1, haikuSortie: 0.5 },
   codePostal: "",
+  lecteur: "claude",
 };
 
 /** Réglages lus dans la base, complétés par les valeurs par défaut. */
@@ -84,6 +85,7 @@ export function lireReglages(donnees: unknown): Reglages {
     seuil: Number.isFinite(seuil) && seuil > 0 ? seuil : REGLAGES_DEFAUT.seuil,
     tarifs: { ...REGLAGES_DEFAUT.tarifs, ...(d.tarifs ?? {}) },
     codePostal: typeof d.codePostal === "string" ? d.codePostal : "",
+    lecteur: d.lecteur === "gemini" ? "gemini" : "claude",
   };
 }
 

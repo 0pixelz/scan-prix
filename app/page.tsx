@@ -116,7 +116,7 @@ function App({ refuse }: { refuse: () => void }) {
   const [rapportEnCours, setRapportEnCours] = useState(false);
   const lecture = acces?.role === "lecture";
   const [apparence, setApparence] = useState<Apparence>(lireApparence);
-  const [secours, setSecours] = useState(false); // dernière photo lue par le service de secours
+  const [secours, setSecours] = useState<{ lecteur: "claude" | "gemini"; panne: string } | null>(null); // le lecteur choisi a échoué : l'autre a lu
   const [chargement, setChargement] = useState(true); // premier chargement des prix de la visite
   const [comparaison, setComparaison] = useState<LigneComparaison[]>([]);
   const [replies, setReplies] = useState<Set<string>>(new Set()); // catégories repliées
@@ -324,11 +324,11 @@ function App({ refuse }: { refuse: () => void }) {
         if (!json.scans.length) setErreur(json.message || "Aucune carte de prix lisible.");
         else {
           if (visiteRef.current?.id === p.visiteId) setScans((s) => [...(json.scans as Scan[]), ...s]);
-          setSecours(json.secours === true);
+          setSecours(json.secours === true ? { lecteur: json.lecteur === "gemini" ? "gemini" : "claude", panne: typeof json.panne === "string" ? json.panne : "" } : null);
           // Retour immédiat : vignette de la photo avec le prix lu, et vibration si l'appareil le permet
           const lu = (json.scans as Scan[])[0];
           const n = json.scans.length;
-          setVignette({ image: p.image, texte: n > 1 ? `${n} prix lus` : lu.produit || "Produit non lu", prix: n > 1 ? "" : argent(promoUnitaire(lu) ?? lu.prix_regulier) });
+          setVignette({ image: p.image, texte: n > 1 ? `${n} prix lus` : lu.produit || "Produit non lu", prix: (n > 1 ? "" : argent(promoUnitaire(lu) ?? lu.prix_regulier)) + (json.lecteur === "gemini" ? (n > 1 ? "Lu par Google" : " · lu par Google") : "") });
           setTimeout(() => setVignette((v) => (v?.image === p.image ? null : v)), 2800);
           try { navigator.vibrate?.(40); } catch { /* vibration non offerte */ }
           // Photo en haute résolution, gardée pour le zoom
@@ -686,7 +686,16 @@ function App({ refuse }: { refuse: () => void }) {
                   {enAttente > 0 && navigator.onLine && <button className="small" onClick={() => traiterFile()}>Réessayer</button>}
                 </div>
               )}
-              {secours && <div className="alert avis" onClick={() => setSecours(false)}><span>Claude n'est pas disponible (crédits ou panne) : les photos sont lues par le service de secours. Vérifie les lectures de plus près.</span></div>}
+              {secours && (
+                <div className="alert avis" onClick={() => setSecours(null)}>
+                  <span>
+                    {secours.lecteur === "gemini"
+                      ? "Claude n'a pas pu lire la photo : Google a pris le relais. Vérifie les lectures de plus près."
+                      : "Google n'a pas pu lire la photo : Claude a pris le relais (lecture payante)."}
+                    {secours.panne ? ` (${secours.panne})` : ""}
+                  </span>
+                </div>
+              )}
               {enCours > 0 && <div className="alert info">Lecture de {enCours} photo{enCours > 1 ? "s" : ""} en cours…</div>}
 
               {enDouble.size > 0 && (

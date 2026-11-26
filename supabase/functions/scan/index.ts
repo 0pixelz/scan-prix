@@ -1,6 +1,6 @@
 // Fonction Edge : lit une photo de cartes de prix avec Claude Vision et enregistre les prix.
-// Si Claude ne répond pas (crédits épuisés, panne), la photo est lue par un service de secours (Gemini)
-// quand sa clé est enregistrée.
+// Deux lecteurs possibles : Claude (payant, par défaut) et Google Gemini (volet gratuit). Le réglage « lecteur »
+// choisit lequel lit en premier ; l'autre prend le relais en cas d'échec.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const cors = {
@@ -162,35 +162,43 @@ Deno.serve(async (req) => {
 
     const base64 = String(image).replace(/^data:image\/\w+;base64,/, "");
 
-    // Lecture par Claude ; si elle échoue, par le service de secours quand sa clé existe.
+    // Deux lecteurs : Claude et Google Gemini. Le réglage « lecteur » choisit lequel passe en premier ;
+    // l'autre prend le relais si le premier échoue ou n'a pas de clé.
+    const { data: reg } = await sb.from("reglages").select("donnees").eq("id", 1).maybeSingle();
+    const googleDabord = (reg?.donnees as { lecteur?: string } | null)?.lecteur === "gemini";
+    const parClaude = async (): Promise<Lecture> => {
+      const { data: cle } = await sb.rpc("lire_cle_claude");
+      if (!cle) throw new Error("la clé API Claude n'est pas enregistrée.");
+      return lireClaude(cle, base64, circulaire);
+    };
+    const parGoogle = async (): Promise<Lecture> => {
+      const { data: cle } = await sb.rpc("lire_cle_secours");
+      if (!cle) throw new Error("la clé Google n'est pas enregistrée.");
+      return lireSecours(cle, base64, circulaire);
+    };
+    const ordre = googleDabord
+      ? [{ nom: "gemini", lire: parGoogle }, { nom: "claude", lire: parClaude }]
+      : [{ nom: "claude", lire: parClaude }, { nom: "gemini", lire: parGoogle }];
     let lecture: Lecture | null = null;
-    let panne = "";
-    let secours = false;
-    const { data: cle } = await sb.rpc("lire_cle_claude");
-    if (!cle) panne = "La clé API Claude n'est pas encore enregistrée.";
-    else {
+    let lecteur = "";
+    const pannes: string[] = [];
+    for (const l of ordre) {
       try {
-        lecture = await lireClaude(cle, base64, circulaire);
+        lecture = await l.lire();
+        lecteur = l.nom;
+        break;
       } catch (e) {
-        panne = e instanceof Error ? e.message : "erreur inconnue";
+        pannes.push(`${l.nom === "claude" ? "Claude" : "Google"} : ${e instanceof Error ? e.message : "erreur inconnue"}`);
       }
     }
-    if (!lecture) {
-      const { data: cleSecours } = await sb.rpc("lire_cle_secours");
-      if (!cleSecours) return json({ error: `Lecture de la photo impossible : ${panne}` });
-      try {
-        lecture = await lireSecours(cleSecours, base64, circulaire);
-        secours = true;
-      } catch (e) {
-        return json({ error: `Lecture de la photo impossible. Claude : ${panne} Secours : ${e instanceof Error ? e.message : "erreur inconnue"}` });
-      }
-    }
+    if (!lecture) return json({ error: `Lecture de la photo impossible. ${pannes.join(" ")}` });
+    const secours = lecteur !== ordre[0].nom; // le lecteur choisi n'a pas pu lire : l'autre a pris le relais
     // Suivi de l'utilisation (jetons comptés par le service qui a lu la photo)
     await sb.from("usage_claude").insert({
       fonction: circulaire ? "circulaire" : "scan", modele: lecture.modele, photos: 1, entree: lecture.entree, sortie: lecture.sortie,
     });
     const cartes = lecture.cartes.filter((c) => c && typeof c === "object");
-    if (!cartes.length) return json({ scans: [], message: circulaire ? "Aucune offre lisible sur cette page." : "Aucune carte de prix lisible sur cette photo." });
+    if (!cartes.length) return json({ scans: [], secours, lecteur, panne: pannes[0] ?? null, message: circulaire ? "Aucune offre lisible sur cette page." : "Aucune carte de prix lisible sur cette photo." });
 
     // Photo conservée pour pouvoir vérifier une lecture douteuse (non bloquant si l'envoi échoue).
     let photoPath: string | null = `cartes/${crypto.randomUUID()}.jpg`;
@@ -212,7 +220,7 @@ Deno.serve(async (req) => {
     }));
     const { data, error } = await sb.from("scans").insert(lignes).select();
     if (error) return json({ error: error.message });
-    return json({ scans: data, secours });
+    return json({ scans: data, secours, lecteur, panne: pannes[0] ?? null });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "Erreur inconnue" });
   }

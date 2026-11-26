@@ -50,8 +50,9 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 - **Gestes** : glisser une ligne vers la gauche pour la supprimer (récupérable), vers la droite pour la marquer
   vérifiée ; tirer vers le bas pour actualiser. Le bouton de photo est au centre de la barre du bas.
 
-- **Secours pour la lecture des photos** : si Claude ne répond pas (crédits épuisés, panne), la photo est lue par
-  Gemini quand le secret GitHub `GEMINI_API_KEY` a été envoyé avec le flux « Enregistrer la clé de secours ».
+- **Lecture des photos** : par Claude (par défaut) ou par Google Gemini (volet gratuit), au choix dans
+  Plus > Réglages > Lecture des photos et coût. L'autre lecteur prend le relais si le premier échoue. Gemini demande
+  le secret GitHub `GEMINI_API_KEY`, envoyé avec le flux « Enregistrer la clé de secours ».
 
 - **Circulaires** (onglet Analyse) : pour les produits de la visite, cherche les promos en cours chez les autres
   bannières (recherche Flipp, non officielle), garde les produits comparables (jugés par Claude) et montre l'écart

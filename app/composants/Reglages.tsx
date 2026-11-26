@@ -10,7 +10,7 @@ import { IAlerte, IAssistant, ICamera, IChevron, ICoche, IEffacer, IEtiquette, I
 export type Section = "apparence" | "filigrane" | "circulaires" | "cout" | "acces" | "corbeille";
 const TITRES: Record<Section, string> = {
   apparence: "Apparence", filigrane: "Signature des photos", circulaires: "Circulaires et alertes",
-  cout: "Coût Claude", acces: "Accès collègue", corbeille: "Corbeille",
+  cout: "Lecture des photos et coût", acces: "Accès collègue", corbeille: "Corbeille",
 };
 type Jete = { id: string; type: "visites" | "scans"; objet_id: string; donnees: Record<string, unknown>; lot: number; supprime_le: string };
 type Usage = { quand: string; fonction: string; modele: string; entree: number; sortie: number; photos: number };
@@ -176,7 +176,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
     { section: "apparence", icone: <IReglages />, etat: `Thème ${themes[apparence.theme]} · ${textes[apparence.texte]}` },
     { section: "filigrane", icone: <ICamera />, etat: reglages.filigrane.actif ? `Activée${reglages.filigrane.nom ? ` · ${reglages.filigrane.nom}` : ""}` : "Désactivée" },
     { section: "circulaires", icone: <IAlerte />, etat: `${reglages.codePostal ? `Code postal ${reglages.codePostal}` : "Code postal à entrer"} · seuil ${String(reglages.seuil).replace(".", ",")} %` },
-    { section: "cout", icone: <IAssistant />, etat: "Photos lues et coût estimé du mois" },
+    { section: "cout", icone: <IAssistant />, etat: `Lecture par ${reglages.lecteur === "gemini" ? "Google (gratuit)" : "Claude"} · coût estimé du mois` },
     { section: "acces", icone: <ICoche />, etat: !acces ? "…" : !acces.proprietaire ? (lecture ? "Tu es en lecture seule" : "Tu utilises un code collègue") : acces.collegue ? `Code actif · ${acces.collegue.role === "lecture" ? "lecture seule" : "accès complet"}` : "Aucun code collègue" },
     { section: "corbeille", icone: <IEffacer />, etat: nbCorbeille === null ? "…" : nbCorbeille ? `${nbCorbeille} élément${nbCorbeille > 1 ? "s" : ""} récupérable${nbCorbeille > 1 ? "s" : ""}` : "Vide" },
   ];
@@ -289,6 +289,14 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
                 </div>
               );
             })}
+            <label>Qui lit les photos en premier</label>
+            <div className="segments">
+              {([["claude", "Claude (précis, payant)"], ["gemini", "Google (gratuit)"]] as const).map(([v, libelle]) => (
+                <button key={v} type="button" disabled={lecture} className={reglages.lecteur === v ? "on" : ""}
+                  onClick={() => reglages.lecteur !== v && sauver({ ...reglages, lecteur: v }, v === "gemini" ? "Google lira les photos en premier ; Claude prendra le relais s'il échoue." : "Claude lira les photos en premier.")}>{libelle}</button>
+              ))}
+            </div>
+            <div className="muted">Google Gemini est gratuit dans ses limites quotidiennes, mais utilise les photos envoyées pour améliorer ses produits. Il faut que la clé Google soit enregistrée ; sinon Claude lit comme d'habitude.</div>
             <label>Tarifs (dollars US par million de jetons)</label>
             <div className="grid2">
               {([["sonnetEntree", "Lecture des photos, entrée"], ["sonnetSortie", "Lecture des photos, sortie"], ["haikuEntree", "Assistant, entrée"], ["haikuSortie", "Assistant, sortie"]] as const).map(([k, libelle]) => (
