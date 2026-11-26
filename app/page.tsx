@@ -148,7 +148,7 @@ function App({ refuse }: { refuse: () => void }) {
 
   const enregistrerReglages = useCallback(async (r: TReglages): Promise<string | null> => {
     const { data, error } = await sb.from("reglages").upsert({ id: 1, donnees: r, modifie_le: new Date().toISOString() }).select("id");
-    if (error || !data?.length) return /row-level/i.test(error?.message ?? "row-level") ? "Accès en lecture seule : modification refusée." : error!.message;
+    if (error || !data?.length) return /row-level/i.test(error?.message ?? "row-level") ? "Seul le code principal peut modifier les réglages." : error!.message;
     setReglages(r);
     try { localStorage.setItem("scanprix.reglages", JSON.stringify(r)); } catch { /* stockage indisponible */ }
     return null;
@@ -810,7 +810,7 @@ function App({ refuse }: { refuse: () => void }) {
 
       {onglet === "comparer" && <Analyse key={`${vueAnalyse}-${version}`} historique={setHistorique} vueInitiale={vueAnalyse} visiteId={visite?.id ?? null} refuse={refuse}
         codePostal={reglages.codePostal} changerCodePostal={(c) => { enregistrerReglages({ ...reglagesRef.current, codePostal: c }).then((e) => e && setErreur(e)); }}
-        seuil={reglages.seuil} changerSeuil={(s) => { enregistrerReglages({ ...reglagesRef.current, seuil: s }).then((e) => e && setErreur(e)); }} lecture={lecture} />}
+        seuil={reglages.seuil} changerSeuil={(s) => { enregistrerReglages({ ...reglagesRef.current, seuil: s }).then((e) => e && setErreur(e)); }} lecture={lecture} fige={!acces?.proprietaire} />}
 
       {onglet === "assistant" && <Assistant visite={visite} modifie={() => { chargerScans(); chargerListe(); }} refuse={refuse} />}
 

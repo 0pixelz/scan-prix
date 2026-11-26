@@ -452,3 +452,13 @@ revoke execute on function public.lire_cle_images() from public, anon, authentic
 -- Clé Google (Gemini) : le format accepté a été élargi (points permis, espaces retirés), puis l'accès d'écriture
 -- a été retiré une fois la clé enregistrée.
 revoke execute on function public.definir_cle_secours(text) from public, anon, authenticated;
+
+-- Les réglages partagés (signature, circulaires, lecteur des photos, tarifs) ne se modifient qu'avec le code
+-- principal : un collègue, même en accès complet, peut les lire mais pas les changer.
+create or replace function public.jeton_proprietaire()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select prive.est_proprietaire()
+$$;
+alter policy "reglages avec jeton" on public.reglages
+  using ((select public.jeton_valide())) with check ((select public.jeton_proprietaire()));
+alter policy "suppression complet seulement" on public.reglages using ((select public.jeton_proprietaire()));

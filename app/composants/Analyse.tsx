@@ -15,12 +15,13 @@ export type VueAnalyse = "accueil" | "comparer" | "tableau" | "variations" | "al
 const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %`;
 
 /** Onglet Analyse : comparaison entre bannières, tableau de bord, variations de prix et prix de référence. */
-export default function Analyse({ historique, vueInitiale, visiteId, refuse, seuil, changerSeuil, lecture, codePostal, changerCodePostal }: {
+export default function Analyse({ historique, vueInitiale, visiteId, refuse, seuil, changerSeuil, lecture, fige, codePostal, changerCodePostal }: {
   codePostal: string;
   changerCodePostal: (c: string) => void;
   seuil: number;
   changerSeuil: (s: number) => void;
   lecture: boolean;
+  fige: boolean; // réglages partagés réservés au code principal
   historique: (g: Groupe) => void;
   vueInitiale: VueAnalyse;
   visiteId: string | null;
@@ -346,7 +347,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                 <b>Seuil d'alerte</b>
                 <div className="muted">Un écart de prix égal ou supérieur à ce pourcentage est signalé.</div>
               </div>
-              <input value={seuilTexte} inputMode="decimal" disabled={lecture} aria-label="Seuil d'alerte en pourcentage"
+              <input value={seuilTexte} inputMode="decimal" disabled={fige} aria-label="Seuil d'alerte en pourcentage"
                 onChange={(e) => setSeuilTexte(e.target.value)} onBlur={enregistrerSeuil} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
               <span>%</span>
             </div>
@@ -406,7 +407,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
 
       {/* ---------- Promos des circulaires ---------- */}
       {vue === "promos" && scans !== null && (
-        <Promos enregistre={chargerPromos} groupes={groupes} refs={refs} visiteId={visiteId} seuil={seuil} codePostal={codePostal} changerCodePostal={changerCodePostal} lecture={lecture} historique={historique} refuse={refuse} />
+        <Promos enregistre={chargerPromos} groupes={groupes} refs={refs} visiteId={visiteId} seuil={seuil} codePostal={codePostal} changerCodePostal={changerCodePostal} lecture={lecture} fige={fige} historique={historique} refuse={refuse} />
       )}
 
       {/* ---------- Référence ---------- */}

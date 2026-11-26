@@ -44,7 +44,7 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   - *Signature des photos* : logo, nom, poste ou équipe, date et heure de la photo, lieu (facultatif), en bas à
     gauche de la photo gardée. L'image envoyée en lecture reste sans signature. Peut être désactivée.
   - *Coût Claude* : photos lues, messages et coût estimé du mois, à partir des jetons comptés.
-  - *Accès collègue* : deuxième code à 4 chiffres, en lecture seule ou complet, retirable à tout moment.
+  - *Accès collègue* : deuxième code à 4 chiffres, en lecture seule ou complet, retirable à tout moment. Les réglages partagés (signature, circulaires, lecteur des photos, tarifs) ne se modifient qu'avec le code principal.
 
   - *Apparence* : thème automatique, clair ou sombre, et taille du texte (gardés sur l'appareil).
 - **Gestes** : glisser une ligne vers la gauche pour la supprimer (récupérable), vers la droite pour la marquer

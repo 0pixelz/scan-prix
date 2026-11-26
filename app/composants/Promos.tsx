@@ -22,7 +22,7 @@ const MAX = 30;
  * Promos en cours dans les circulaires des autres bannières, pour les produits relevés, avec l'écart par rapport
  * à mon prix. Suggestions tirées de Flipp (source non officielle) : à confirmer avant de s'en servir.
  */
-export default function Promos({ enregistre, groupes, refs, visiteId, seuil, codePostal, changerCodePostal, lecture, historique, refuse }: {
+export default function Promos({ enregistre, groupes, refs, visiteId, seuil, codePostal, changerCodePostal, lecture, fige, historique, refuse }: {
   enregistre?: () => void;
   groupes: Groupe[];
   refs: Map<string, Reference>;
@@ -31,6 +31,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
   codePostal: string;
   changerCodePostal: (c: string) => void;
   lecture: boolean;
+  fige: boolean;
   historique: (g: Groupe) => void;
   refuse: () => void;
 }) {
@@ -140,7 +141,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
         </div>
         <label>Code postal (région des circulaires)</label>
         <div className="row">
-          <input className="grow" value={saisie} disabled={lecture} onChange={(e) => setSaisie(e.target.value.toUpperCase())} placeholder="Ex. H2X 1Y4" maxLength={7} autoCapitalize="characters"
+          <input className="grow" value={saisie} disabled={fige} onChange={(e) => setSaisie(e.target.value.toUpperCase())} placeholder="Ex. H2X 1Y4" maxLength={7} autoCapitalize="characters"
             onBlur={() => { if (saisie.trim() !== codePostal) changerCodePostal(saisie.trim()); }} />
         </div>
         <div className="actions">

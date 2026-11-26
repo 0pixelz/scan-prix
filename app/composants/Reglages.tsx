@@ -33,6 +33,9 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
 }) {
   const sb = supabaseBrowser();
   const lecture = acces?.role === "lecture";
+  // Les réglages partagés (signature, circulaires, lecteur, tarifs) ne se changent qu'avec le code principal.
+  const fige = !acces?.proprietaire;
+  const avis = acces && fige ? <div className="alert info">Seul le code principal peut modifier ces réglages.</div> : null;
   const [section, setSection] = useState<Section | null>(sectionInitiale ?? null);
   const [f, setF] = useState(reglages.filigrane);
   const [tarifs, setTarifs] = useState(() => Object.fromEntries(Object.entries(reglages.tarifs).map(([k, v]) => [k, String(v).replace(".", ",")])) as Record<keyof TReglages["tarifs"], string>);
@@ -233,29 +236,31 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
             const v = parseFloat(seuil.replace(",", "."));
             sauver({ ...reglages, codePostal: codePostal.trim().toUpperCase(), seuil: Number.isFinite(v) && v > 0 ? Math.round(v * 10) / 10 : reglages.seuil }, "Enregistré.");
           }}>
+            {avis}
             <label>Code postal (région des circulaires)</label>
-            <input value={codePostal} disabled={lecture} onChange={(e) => setCodePostal(e.target.value.toUpperCase())} placeholder="Ex. H2X 1Y4" maxLength={7} autoCapitalize="characters" />
+            <input value={codePostal} disabled={fige} onChange={(e) => setCodePostal(e.target.value.toUpperCase())} placeholder="Ex. H2X 1Y4" maxLength={7} autoCapitalize="characters" />
             <div className="muted">Sert à chercher les promos des concurrents et les photos de produits dans les circulaires de ta région.</div>
             <label>Seuil d'alerte (%)</label>
-            <input value={seuil} inputMode="decimal" disabled={lecture} onChange={(e) => setSeuil(e.target.value)} />
+            <input value={seuil} inputMode="decimal" disabled={fige} onChange={(e) => setSeuil(e.target.value)} />
             <div className="muted">Un écart de prix égal ou supérieur à ce pourcentage est signalé dans Alertes, l'Excel et le rapport.</div>
-            {!lecture && <div className="actions"><button className="primary full">Enregistrer</button></div>}
+            {!fige && <div className="actions"><button className="primary full">Enregistrer</button></div>}
           </form>
         )}
 
         {section === "filigrane" && (
           <form onSubmit={(e) => { e.preventDefault(); sauver({ ...reglages, filigrane: { ...f, nom: f.nom.trim(), poste: f.poste.trim() } }, "Signature enregistrée. Elle s'applique aux prochaines photos."); }}>
-            <label className="case"><input type="checkbox" checked={f.actif} disabled={lecture} onChange={(e) => setF({ ...f, actif: e.target.checked })} />Ajouter une signature au bas des photos</label>
+            {avis}
+            <label className="case"><input type="checkbox" checked={f.actif} disabled={fige} onChange={(e) => setF({ ...f, actif: e.target.checked })} />Ajouter une signature au bas des photos</label>
             {f.actif && (
               <>
-                <label className="case"><input type="checkbox" checked={f.logo} disabled={lecture} onChange={(e) => setF({ ...f, logo: e.target.checked })} />Afficher le logo</label>
+                <label className="case"><input type="checkbox" checked={f.logo} disabled={fige} onChange={(e) => setF({ ...f, logo: e.target.checked })} />Afficher le logo</label>
                 <label>Nom</label>
-                <input value={f.nom} disabled={lecture} onChange={(e) => setF({ ...f, nom: e.target.value })} placeholder="Ex. Jonathan Plouffe" maxLength={60} />
+                <input value={f.nom} disabled={fige} onChange={(e) => setF({ ...f, nom: e.target.value })} placeholder="Ex. Jonathan Plouffe" maxLength={60} />
                 <label>Poste ou équipe</label>
-                <input value={f.poste} disabled={lecture} onChange={(e) => setF({ ...f, poste: e.target.value })} placeholder="Ex. Chef gestion des prix, Équipe pricing" maxLength={60} />
-                <label className="case"><input type="checkbox" checked={f.lieu} disabled={lecture} onChange={(e) => setF({ ...f, lieu: e.target.checked })} />Ajouter le lieu (bannière et magasin de la visite)</label>
+                <input value={f.poste} disabled={fige} onChange={(e) => setF({ ...f, poste: e.target.value })} placeholder="Ex. Chef gestion des prix, Équipe pricing" maxLength={60} />
+                <label className="case"><input type="checkbox" checked={f.lieu} disabled={fige} onChange={(e) => setF({ ...f, lieu: e.target.checked })} />Ajouter le lieu (bannière et magasin de la visite)</label>
                 <label>Transparence : {100 - f.opacite} %</label>
-                <input type="range" className="curseur" min={0} max={80} step={5} value={100 - f.opacite} disabled={lecture} aria-label="Transparence de la signature"
+                <input type="range" className="curseur" min={0} max={80} step={5} value={100 - f.opacite} disabled={fige} aria-label="Transparence de la signature"
                   onChange={(e) => setF({ ...f, opacite: 100 - Number(e.target.value) })} />
                 <label>Aperçu</label>
                 <div className="apercufili">
@@ -267,7 +272,7 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
                 <div className="muted">La date et l'heure sont celles de la photo. La signature est placée en bas à gauche de la photo gardée ; l'image lue par Claude reste sans signature.</div>
               </>
             )}
-            {!lecture && <div className="actions"><button className="primary full">Enregistrer</button></div>}
+            {!fige && <div className="actions"><button className="primary full">Enregistrer</button></div>}
           </form>
         )}
 
@@ -289,10 +294,11 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
                 </div>
               );
             })}
+            {avis}
             <label>Qui lit les photos en premier</label>
             <div className="segments">
               {([["claude", "Claude (précis, payant)"], ["gemini", "Google (gratuit)"]] as const).map(([v, libelle]) => (
-                <button key={v} type="button" disabled={lecture} className={reglages.lecteur === v ? "on" : ""}
+                <button key={v} type="button" disabled={fige} className={reglages.lecteur === v ? "on" : ""}
                   onClick={() => reglages.lecteur !== v && sauver({ ...reglages, lecteur: v }, v === "gemini" ? "Google lira les photos en premier ; Claude prendra le relais s'il échoue." : "Claude lira les photos en premier.")}>{libelle}</button>
               ))}
             </div>
@@ -302,12 +308,12 @@ export default function Reglages({ apparence, changerApparence, reglages, enregi
               {([["sonnetEntree", "Lecture des photos, entrée"], ["sonnetSortie", "Lecture des photos, sortie"], ["haikuEntree", "Assistant, entrée"], ["haikuSortie", "Assistant, sortie"]] as const).map(([k, libelle]) => (
                 <div key={k}>
                   <label>{libelle}</label>
-                  <input value={tarifs[k]} inputMode="decimal" disabled={lecture} onChange={(e) => setTarifs({ ...tarifs, [k]: e.target.value })} />
+                  <input value={tarifs[k]} inputMode="decimal" disabled={fige} onChange={(e) => setTarifs({ ...tarifs, [k]: e.target.value })} />
                 </div>
               ))}
             </div>
             <div className="muted" style={{ marginTop: 8 }}>Estimation calculée à partir des jetons comptés depuis l'ajout de ce suivi. Le montant officiel et ton solde sont dans la console Anthropic.</div>
-            {!lecture && (
+            {!fige && (
               <div className="actions">
                 <button className="full" onClick={() => sauver({ ...reglages, tarifs: { sonnetEntree: t("sonnetEntree"), sonnetSortie: t("sonnetSortie"), haikuEntree: t("haikuEntree"), haikuSortie: t("haikuSortie") } }, "Tarifs enregistrés.")}>Enregistrer les tarifs</button>
               </div>
