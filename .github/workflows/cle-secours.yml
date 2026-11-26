@@ -5,6 +5,9 @@ name: Enregistrer la clé de secours
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/cle-secours.yml"]
 
 jobs:
   cle:
