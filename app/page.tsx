@@ -177,6 +177,44 @@ function App({ refuse }: { refuse: () => void }) {
     return null;
   }, [sb]);
 
+  // Fenêtres du bas : glisser vers le bas depuis le haut de la fenêtre (poignée, titre) la referme, comme un
+  // appui à côté. Le reste de la fenêtre garde son défilement normal.
+  useEffect(() => {
+    let geste: { panneau: HTMLElement; y: number; dy: number } | null = null;
+    const debut = (e: TouchEvent) => {
+      const panneau = (e.target as HTMLElement | null)?.closest?.(".sheet .panel") as HTMLElement | null;
+      if (!panneau || e.touches.length !== 1 || panneau.scrollTop > 0) return;
+      const y = e.touches[0].clientY;
+      if (y - panneau.getBoundingClientRect().top > 72) return; // seulement la zone de la poignée et du titre
+      geste = { panneau, y, dy: 0 };
+    };
+    const mouvement = (e: TouchEvent) => {
+      if (!geste) return;
+      geste.dy = Math.max(0, e.touches[0].clientY - geste.y);
+      geste.panneau.style.transition = "none";
+      geste.panneau.style.transform = `translateY(${geste.dy}px)`;
+      if (geste.dy > 6 && e.cancelable) e.preventDefault();
+    };
+    const fin = () => {
+      if (!geste) return;
+      const { panneau, dy } = geste;
+      geste = null;
+      panneau.style.transition = "transform 0.18s ease";
+      panneau.style.transform = "";
+      if (dy > 110) (panneau.closest(".sheet") as HTMLElement | null)?.click(); // même effet qu'un appui à côté de la fenêtre
+    };
+    document.addEventListener("touchstart", debut, { passive: true });
+    document.addEventListener("touchmove", mouvement, { passive: false });
+    document.addEventListener("touchend", fin);
+    document.addEventListener("touchcancel", fin);
+    return () => {
+      document.removeEventListener("touchstart", debut);
+      document.removeEventListener("touchmove", mouvement);
+      document.removeEventListener("touchend", fin);
+      document.removeEventListener("touchcancel", fin);
+    };
+  }, []);
+
   // Promos de circulaires gardées (dernières recherches) : affichées sur chaque prix, avec le logo des concurrents.
   const [promosGardees, setPromosGardees] = useState<Map<string, { banniere: string; prix: number; ecart: number | null }[]>>(new Map());
   const chargerPromos = useCallback(async () => {

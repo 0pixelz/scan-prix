@@ -121,7 +121,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
     <main>
       {erreur && <div className="alert" onClick={() => setErreur("")}>{erreur}</div>}
       {vue === "accueil" ? (
-        <div className="tuiles">
+        <div className="tuiles-analyse">
           {tuiles.map((t) => (
             <button key={t.vue} className={t.alerte ? "alerte" : ""} onClick={() => setVue(t.vue)}>
               <span className="ic soft">{t.icone}</span>
