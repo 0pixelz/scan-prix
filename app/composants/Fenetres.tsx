@@ -10,6 +10,7 @@ import { chercherImage, cleImage, dejaEssaye, imageEnGrand, noterEssai, sourceIm
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
+import PromosProduit from "./PromosProduit";
 import { BANNIERES, ICodeBarres, IPosition, IRecherche, PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, logoBanniere } from "./ui";
 
 /** Création d'une visite, ou modification d'une visite existante (bannière, magasin, date). */
@@ -195,9 +196,12 @@ export function ScannerCode({ fermer, lu }: { fermer: () => void; lu: (code: str
 
 const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "points", "points_details", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
 
-export function Edition({ scan, fermer, enregistre, supprime, historique, lecture, codePostal }: {
+export function Edition({ scan, fermer, enregistre, supprime, historique, lecture, codePostal, banniere, seuil, promosChange }: {
   scan: Scan;
   codePostal?: string;
+  banniere?: string | null; // bannière de la visite : exclue de la recherche des circulaires
+  seuil?: number;
+  promosChange?: () => void;
   lecture?: boolean;
   fermer: () => void;
   enregistre: (s: Scan, garderOuvert?: boolean) => void;
@@ -310,6 +314,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
             </div>
           </div>
         )}
+        <PromosProduit scan={scan} banniere={banniere ?? null} codePostal={codePostal ?? ""} seuil={seuil ?? 5} lecture={lecture} change={promosChange} />
         {(unite || reference) && (
           <div className="resume">
             {unite && <div><span>Prix par unité</span><b>{texteUnite(unite)}</b></div>}

@@ -27,6 +27,7 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
   - *Référence* : import d'un fichier Excel ou CSV (colonnes CUP et Prix) ; chaque relevé affiche son écart.
 - **Assistant** : discussion avec Claude pour résumer, comparer, corriger, gérer la liste, ou lire une photo.
 - **Prix membre et points** : repérés par Claude, affichés sur chaque prix et dans l'Excel.
+- **Circulaires sur le produit** : la fiche d'un prix cherche les promos en cours chez les concurrents (recherche Flipp, non officielle) et affiche la bannière, le prix et l'écart ; les lignes de prix portent ensuite le logo des concurrents en circulaire.
 - **Excel** : sept onglets — Résumé par visite, Comparaison entre bannières, Alertes, Circulaires, Variations,
   Produits (photo, description, prix et bannière la moins chère), Prix (données brutes
   avec prix par unité, source carte ou circulaire, prix de référence et écart).

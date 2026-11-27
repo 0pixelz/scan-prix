@@ -3,19 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
-import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { Reference } from "@/lib/types";
+import { ecartPromo as ecart, pctLisible as pct, type Offre } from "@/lib/promos";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
 import { IRecherche, PastilleBanniere, argent, dateLisible } from "./ui";
 
-type Offre = {
-  banniere: string; nom: string; prix: number; prixOffre: number; quantite: number; texte: string | null;
-  debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "proche" | "a_confirmer"; format: string | null;
-};
 type Resultat = { quand: number; juge: boolean; offres: Record<string, Offre[]> };
 
-const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %`;
 const MAX = 30;
 
 /**
@@ -108,15 +103,6 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
     } finally {
       setOccupe(false);
     }
-  }
-
-  /** Écart entre la promo et mon prix : au prix affiché si le format est le même, sinon au prix par unité quand c'est possible. */
-  function ecart(monPrix: number, monFormat: string | null, o: Offre): { pct: number; parUnite: string | null } | null {
-    if (o.verdict === "identique") return { pct: ((o.prix - monPrix) / monPrix) * 100, parUnite: null };
-    const a = prixParUnite(monPrix, monFormat);
-    const b = prixParUnite(o.prix, o.format);
-    if (a && b && a.unite === b.unite && a.valeur > 0) return { pct: ((b.valeur - a.valeur) / a.valeur) * 100, parUnite: texteUnite(b) };
-    return null; // format de l'offre inconnu : pas de comparaison chiffrée
   }
 
   const lignes = vises

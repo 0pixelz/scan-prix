@@ -24,7 +24,9 @@ import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
   IAssistant, ICamera, IComparer, ICrayon, IEffacer, IPlusMenu, IReglages, IEtiquette, IExport, IPartage, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
   PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
+  logoBanniere,
 } from "./composants/ui";
+import { clePromo, pctLisible } from "@/lib/promos";
 
 type Onglet = "scan" | "liste" | "comparer" | "plus" | "assistant" | "visites" | "reglages";
 type Filtre = "tous" | "promos" | "verifier" | "doublons";
@@ -174,6 +176,23 @@ function App({ refuse }: { refuse: () => void }) {
     try { localStorage.setItem("scanprix.reglages", JSON.stringify(r)); } catch { /* stockage indisponible */ }
     return null;
   }, [sb]);
+
+  // Promos de circulaires gardées (dernières recherches) : affichées sur chaque prix, avec le logo des concurrents.
+  const [promosGardees, setPromosGardees] = useState<Map<string, { banniere: string; prix: number; ecart: number | null }[]>>(new Map());
+  const chargerPromos = useCallback(async () => {
+    const { data } = await sb.from("promos_circulaires").select("visite_id, produit, marque, cup, banniere, prix, ecart_pct, fin").limit(2000);
+    const m = new Map<string, { banniere: string; prix: number; ecart: number | null }[]>();
+    for (const p of (data ?? []) as { visite_id: string | null; produit: string; marque: string | null; cup: string | null; banniere: string; prix: number; ecart_pct: number | null; fin: string | null }[]) {
+      if (p.fin && Date.parse(p.fin) < Date.now()) continue;
+      const k = `${p.visite_id ?? ""}|${clePromo(p)}`;
+      const l = m.get(k) ?? [];
+      if (!l.some((x) => x.banniere === p.banniere)) l.push({ banniere: p.banniere, prix: Number(p.prix), ecart: p.ecart_pct === null ? null : Number(p.ecart_pct) });
+      m.set(k, l);
+    }
+    for (const l of m.values()) l.sort((a, b) => (a.ecart ?? 999) - (b.ecart ?? 999)); // la meilleure offre d'abord
+    setPromosGardees(m);
+  }, [sb]);
+  useEffect(() => { if (onglet === "scan") chargerPromos(); }, [chargerPromos, onglet]);
 
   const chargerVisites = useCallback(async () => {
     const { data } = await sb.from("visites").select("*").order("created_at", { ascending: false }).limit(200);
@@ -588,6 +607,8 @@ function App({ refuse }: { refuse: () => void }) {
     const ref = refs.get(cupNormalise(s.cup));
     const ecartRef = ref && prixEffectif(s) !== null ? ((prixEffectif(s)! - ref.prix) / ref.prix) * 100 : null;
     const incertain = Boolean(s.confiance && s.confiance !== "haute");
+    const enCirculaire = promosGardees.get(`${s.visite_id}|${clePromo(s)}`) ?? promosGardees.get(`|${clePromo(s)}`);
+    const moinsCher = Boolean(enCirculaire?.some((p) => p.ecart !== null && p.ecart <= -reglages.seuil));
     return (
       <Glissable key={s.id}
         gauche={lecture ? undefined : { libelle: "Supprimer", action: () => supprimerScan(s) }}
@@ -614,6 +635,17 @@ function App({ refuse }: { refuse: () => void }) {
             {s.points ? <span className="pill pts">{s.points.toLocaleString("fr-CA")} points</span> : null}{" "}
             {incertain && <span className="pill verif">À vérifier</span>}{" "}
             {enDouble.has(s.id) && <span className="pill verif">Doublon</span>}
+            {enCirculaire && (
+              <div className="en-circulaire" aria-label={`En circulaire chez ${enCirculaire.map((p) => p.banniere).join(", ")}`}>
+                {enCirculaire.slice(0, 4).map((p) => logoBanniere(p.banniere)
+                  ? <img key={p.banniere} src={logoBanniere(p.banniere)!} alt="" />
+                  : <i key={p.banniere}>{p.banniere}</i>)}
+                <span className={moinsCher ? "hausse" : ""}>
+                  en circulaire : {argent(enCirculaire[0].prix)}
+                  {enCirculaire[0].ecart !== null ? ` (${pctLisible(enCirculaire[0].ecart)})` : ""}
+                </span>
+              </div>
+            )}
           </div>
           <div className="r">
             <b>{argent(pu ?? s.prix_regulier)}</b>
@@ -990,6 +1022,9 @@ function App({ refuse }: { refuse: () => void }) {
           historique={ouvrirHistorique}
           lecture={lecture}
           codePostal={reglages.codePostal}
+          banniere={visites.find((v) => v.id === edition.visite_id)?.banniere ?? null}
+          seuil={reglages.seuil}
+          promosChange={chargerPromos}
         />
       )}
 
