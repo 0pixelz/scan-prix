@@ -1,4 +1,4 @@
-// Fonction Edge : lit une photo de cartes de prix avec Claude Vision et enregistre les prix.
+// Fonction Edge : lit une photo de cartes de prix (ou d'étiquettes de balance sur un emballage) et enregistre les prix.
 // Deux lecteurs possibles : Claude (payant, par défaut) et Google Gemini (volet gratuit). Le réglage « lecteur »
 // choisit lequel lit en premier ; l'autre prend le relais en cas d'échec.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -13,8 +13,8 @@ const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5";
 const MODELES_SECOURS = (Deno.env.get("GEMINI_MODELS") || "gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-3.5-flash,gemini-3.6-flash").split(",").map((m) => m.trim()).filter(Boolean);
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 
-const INTRO_CARTE = `Tu lis des photos de cartes de prix (étiquettes de tablette) prises en magasin au Québec.
-Pour CHAQUE carte de prix lisible sur la photo, extrais les champs demandés.`;
+const INTRO_CARTE = `Tu lis des photos de cartes de prix (étiquettes de tablette) prises en magasin au Québec, et aussi des étiquettes de balance collées sur l'emballage d'un produit pesé (viande, poisson, fromage, charcuterie, prêt-à-manger).
+Pour CHAQUE carte de prix ou étiquette lisible sur la photo, extrais les champs demandés.`;
 
 // Page de circulaire : chaque offre de la page est traitée comme une carte de prix.
 const INTRO_CIRCULAIRE = `Tu lis la photo ou la capture d'une page de circulaire d'épicerie au Québec.
@@ -37,6 +37,14 @@ const REGLES = `Règles :
 - code_article : le numéro d'article interne du magasin. Chez Metro et Super C, c'est le code SAP : un nombre seul, le plus souvent de 8 chiffres, imprimé près du code-barres ou juste en dessous (ex. 15224811). Ne prends jamais à sa place un code avec des tirets (ex. 020721-00011-0803), une date, un numéro d'emplacement (« Emp 7 ») ni un code de planogramme (ex. C18120). Si aucun numéro ne convient, null.
 - prix_unitaire : le prix par unité de mesure imprimé à côté du prix RÉGULIER, tel qu'affiché (ex. « 1,97 $ / 100 g »).
 - prix_unitaire_promo : le prix par unité de mesure imprimé à côté du prix EN RABAIS (ou du prix membre), tel qu'affiché (ex. « 1,69 $ / 100 g »). Quand la carte montre deux prix, chacun a le sien juste en dessous : ne les inverse pas. Sans prix en rabais, null.
+- notes : null, sauf pour une étiquette de balance (voir plus bas).
+- Étiquette de balance (collée sur l'emballage d'un produit pesé) : on la reconnaît à son prix total, son prix unitaire au poids (« $/kg », « $/lb », « $/100 g ») et son poids net, souvent avec « emballé le » ou « meilleur avant ». Pour elle :
+  - prix_regulier = le prix au kilo, pas le prix total du paquet (4,39 $/100 g -> 43.90 ; 19,91 $/lb -> 43.89, soit le prix à la livre multiplié par 2,2046). format = « 1 kg ». prix_unitaire = le prix unitaire tel qu'imprimé (ex. « 43,89 $ / kg »).
+  - notes = le poids net et le prix total du paquet, sous la forme « Paquet de 1,330 kg : 58,37 $ ».
+  - S'il n'y a aucun prix au poids (plat vendu à prix fixe) : prix_regulier = le prix du paquet, format = le poids net ou la quantité, notes = null.
+  - Les dates « emballé le » et « meilleur avant » ne sont pas des dates de promotion : date_debut et date_fin restent null.
+  - cup = null : le code-barres d'une étiquette de balance contient le prix du paquet, il n'identifie pas le produit. code_article = le numéro « Item » ou « Art. » sans les zéros du début, s'il est imprimé.
+  - produit = le nom en français ; marque = la marque imprimée sur l'étiquette (ex. « Kirkland Signature »), sinon null. cle_produit sans le poids, suivi de « au kg » (ex. « kirkland bifteck contre-filet au kg »).
 - confiance : « haute », « moyenne » ou « basse » selon la lisibilité.
 - categorie : une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre.
 - icone : le type de produit, une seule valeur parmi : pain, viennoiserie, craquelin, biscuit, cereales, pates_riz, farine_sucre, lait, yogourt, fromage, beurre, oeufs, viande, volaille, charcuterie, poisson, fruits_de_mer, fruits, legumes, salade, conserve, soupe, sauce_condiment, huile, epices, tartinade, cafe, the, jus, boisson_gazeuse, eau, biere, vin, croustilles, noix, bonbon, chocolat, dessert, creme_glacee, surgele, pizza, repas_prepare, bebe, animaux, nettoyage, lessive, papier, hygiene, sante, autre.
@@ -46,7 +54,7 @@ const FIN_CLAUDE = `Réponds toujours en appelant l'outil enregistrer_cartes, un
 Si rien n'est lisible, appelle-le avec une liste vide.`;
 
 const FIN_SECOURS = `Réponds uniquement avec un objet JSON de la forme {"cartes": [ ... ]}, une entrée par carte lue, avec exactement ces champs :
-produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, prix_membre, points, points_details, cup, code_article, prix_unitaire, prix_unitaire_promo, categorie, icone, cle_produit, confiance.
+produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, prix_membre, points, points_details, cup, code_article, prix_unitaire, prix_unitaire_promo, notes, categorie, icone, cle_produit, confiance.
 Si rien n'est lisible, réponds {"cartes": []}.`;
 
 const texte = { type: ["string", "null"] };
@@ -67,7 +75,7 @@ const OUTIL = {
             promo_quantite: { type: ["integer", "null"] },
             promo_texte: texte, date_debut: texte, date_fin: texte,
             prix_membre: { type: ["boolean", "null"] }, points: { type: ["integer", "null"] }, points_details: texte,
-            cup: texte, code_article: texte, prix_unitaire: texte, prix_unitaire_promo: texte,
+            cup: texte, code_article: texte, prix_unitaire: texte, prix_unitaire_promo: texte, notes: texte,
             categorie: texte, icone: texte, cle_produit: texte,
             confiance: { type: "string", enum: ["haute", "moyenne", "basse"] },
           },
@@ -85,7 +93,7 @@ const date = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.tes
 
 type Lecture = { cartes: Record<string, unknown>[]; modele: string; entree: number; sortie: number };
 const consigne = (circulaire: boolean) =>
-  `Date du jour : ${new Date().toISOString().slice(0, 10)}. ${circulaire ? "Extrais toutes les offres de cette page de circulaire." : "Extrais les cartes de prix."}`;
+  `Date du jour : ${new Date().toISOString().slice(0, 10)}. ${circulaire ? "Extrais toutes les offres de cette page de circulaire." : "Extrais les cartes de prix et les étiquettes de balance."}`;
 
 async function lireClaude(cle: string, base64: string, circulaire: boolean): Promise<Lecture> {
   const rep = await fetch("https://api.anthropic.com/v1/messages", {
@@ -214,6 +222,8 @@ Deno.serve(async (req) => {
     const { error: upErr } = await sb.storage.from("photos").upload(photoPath, octets, { contentType: "image/jpeg" });
     if (upErr) photoPath = null;
 
+    // Étiquette de balance : son code-barres contient le prix du paquet, il n'identifie pas le produit.
+    const balance = (c: Record<string, unknown>) => /^paquet/i.test(str(c.notes) ?? "");
     const lignes = cartes.map((c) => ({
       visite_id: visiteId,
       produit: str(c.produit), marque: str(c.marque), format: str(c.format),
@@ -221,8 +231,8 @@ Deno.serve(async (req) => {
       promo_quantite: typeof c.promo_quantite === "number" ? Math.trunc(c.promo_quantite) : null,
       promo_texte: str(c.promo_texte), date_debut: date(c.date_debut), date_fin: date(c.date_fin),
       prix_membre: c.prix_membre === true, points: typeof c.points === "number" ? Math.trunc(c.points) : null, points_details: str(c.points_details),
-      cup: str(c.cup)?.replace(/\D/g, "") || null,
-      code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire), prix_unitaire_promo: str(c.prix_unitaire_promo),
+      cup: balance(c) ? null : str(c.cup)?.replace(/\D/g, "") || null,
+      code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire), prix_unitaire_promo: str(c.prix_unitaire_promo), notes: str(c.notes),
       categorie: str(c.categorie), icone: str(c.icone)?.toLowerCase() ?? null, cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,
       confiance: ["haute", "moyenne", "basse"].includes(String(c.confiance)) ? String(c.confiance) : "moyenne", photo_path: photoPath, photo_prise_le: prise, source: circulaire ? "circulaire" : null,
     }));

@@ -685,6 +685,7 @@ function App({ refuse }: { refuse: () => void }) {
                 Réf. {argent(ref!.prix)} · {ecartRef > 0 ? "+" : ""}{ecartRef.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %
               </span>
             )}{" "}
+            {s.notes && /^paquet/i.test(s.notes) && <span className="pill membre">Au kilo · {s.notes.replace(/^paquet/i, "paquet")}</span>}{" "}
             {s.prix_membre && <span className="pill pts">Prix membre</span>}{" "}
             {s.points ? <span className="pill pts">{s.points.toLocaleString("fr-CA")} points</span> : null}{" "}
             {incertain && <span className="pill verif">À vérifier</span>}{" "}

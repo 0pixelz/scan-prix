@@ -17,6 +17,7 @@ Stack : Next.js sur Vercel, Supabase (base de données, photos, fonctions Edge),
 - **Hors ligne** : chaque photo est gardée sur l'appareil jusqu'à ce qu'elle soit lue. Sans réseau, les photos
   attendent et partent toutes seules au retour de la connexion, même si l'app a été fermée entre-temps.
 - **Révision rapide** : toucher « À vérifier » fait défiler les lectures incertaines une par une, photo en haut.
+- **Étiquettes de balance** (viande, fromage, prêt-à-manger pesé) : le prix retenu est le prix au kilo ; le poids et le prix du paquet vont dans les notes ; le code-barres (qui contient le prix) est ignoré
 - Toucher une ligne pour **corriger**, agrandir la photo (version haute résolution), scanner le **code-barres**
   ou voir l'**historique** du produit. Chaque prix affiche son **prix par unité** (100 g, 100 ml ou unité).
 - **Liste** : produits à relever ; ils se cochent tout seuls quand ils sont scannés dans la visite en cours.
