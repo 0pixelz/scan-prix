@@ -9,12 +9,12 @@ export type Offre = {
   page?: number | null; pages?: number | null; // page de l'offre et nombre de pages de la circulaire
 };
 
-/** Emplacement de l'offre dans la circulaire : première page, dernière page ou intérieur. */
+/** Emplacement de l'offre dans la circulaire, dans les termes du métier : front page, back page ou intérieur. */
 export function emplacementOffre(o: Pick<Offre, "page" | "pages">): string | null {
   if (!o.page || !o.pages || o.page > o.pages) return null;
-  if (o.page === 1) return "Première page";
-  if (o.page === o.pages) return "Dernière page";
-  return `Intérieur · p. ${o.page} de ${o.pages}`;
+  if (o.page === 1) return "Front page";
+  if (o.page === o.pages) return "Back page";
+  return `Intérieur · p. ${o.page}`;
 }
 
 /** Lien d'une offre, seulement s'il mène bien à la circulaire en ligne. */
