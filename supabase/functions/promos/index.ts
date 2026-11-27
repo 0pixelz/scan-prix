@@ -14,10 +14,38 @@ const VIDES = new Set(["de", "du", "des", "la", "le", "les", "et", "ou", "au", "
 const normaliser = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 const mots = (t: string) => normaliser(t).split(" ").filter((m) => m.length >= 3 && !VIDES.has(m) && !/^\d+$/.test(m));
 
+// Marques maison des bannières présentes au Québec, par groupe (formes sans accents ni ponctuation). Un produit de
+// marque maison se compare aussi au produit équivalent des marques maison des autres groupes.
+const MARQUES_MAISON: Record<string, string[]> = {
+  metro: ["selection", "irresistibles", "irresistible", "life smart", "mieux etre"],
+  loblaw: ["sans nom", "no name", "choix du president", "president s choice", "le choix du president", "pc", "life brand"],
+  sobeys: ["compliments", "panache", "sensations"],
+  walmart: ["great value", "notre excellence", "our finest", "equate", "marketside"],
+  costco: ["kirkland", "kirkland signature"],
+  autres: ["personnelle", "giant value"],
+};
+// Ce qu'on tape dans la recherche pour trouver l'équivalent chez chaque groupe.
+const RECHERCHE_MAISON: Record<string, string[]> = {
+  metro: ["Selection", "Irresistibles"],
+  loblaw: ["Sans nom", "Choix du Président"],
+  sobeys: ["Compliments"],
+  walmart: ["Great Value"],
+  costco: ["Kirkland"],
+};
+const contient = (texte: string, marque: string) => ` ${texte} `.includes(` ${marque} `);
+/** Groupe dont la marque est une marque maison, sinon null. */
+function groupeMaison(marque: string | null): string | null {
+  if (!marque) return null;
+  const m = normaliser(marque);
+  for (const [groupe, marques] of Object.entries(MARQUES_MAISON)) if (marques.some((x) => contient(m, x))) return groupe;
+  return null;
+}
+
 type Produit = { id: string; nom: string; marque: string | null; format: string | null };
 type Offre = {
   banniere: string; nom: string; prix: number; prixOffre: number; quantite: number; texte: string | null;
-  debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "proche" | "a_confirmer"; format: string | null;
+  debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "equivalent" | "proche" | "a_confirmer"; format: string | null;
+  maison: boolean; // offre d'une marque maison d'un autre groupe, pour un produit lui-même de marque maison
   lien: string | null; // page de l'offre dans la circulaire en ligne
   circulaire: number | null; x: number | null; // circulaire et position horizontale de l'offre, pour trouver sa page
   page: number | null; pages: number | null; // page de l'offre et nombre de pages de la circulaire
@@ -63,24 +91,33 @@ async function situer(offres: Offre[]) {
 async function chercher(p: Produit, codePostal: string, exclure: Set<string>): Promise<Offre[]> {
   const motsNom = mots(p.nom);
   const motsMarque = p.marque ? mots(p.marque) : [];
+  const groupe = groupeMaison(p.marque);
   // Deux recherches : le nom complet, puis une version courte (marque + premier mot), car la recherche exige tous les mots.
   const requetes = [...new Set([
     [p.marque, p.nom].filter(Boolean).join(" "),
     [p.marque, motsNom[0] ?? p.nom].filter(Boolean).join(" "),
   ])];
+  // Produit de marque maison : on cherche aussi le même produit sous la marque maison des autres groupes.
+  const court = motsNom.slice(0, 2).join(" ") || p.nom;
+  const requetesMaison = groupe ? Object.entries(RECHERCHE_MAISON).filter(([g]) => g !== groupe).flatMap(([, ms]) => ms.map((m) => `${m} ${court}`)) : [];
+  const autresMaison = groupe ? Object.entries(MARQUES_MAISON).filter(([g]) => g !== groupe).flatMap(([, ms]) => ms) : [];
   const maintenant = Date.now();
   const offres: Offre[] = [];
   const vues = new Set<string>();
   let reussies = 0;
-  for (const q of requetes) {
+  // deno-lint-ignore no-explicit-any
+  const lire = async (q: string): Promise<any[] | null> => {
     const url = `https://backflipp.wishabi.com/flipp/items/search?locale=fr-ca&postal_code=${encodeURIComponent(codePostal)}&q=${encodeURIComponent(q)}`;
-    const rep = await fetch(url, { headers: { accept: "application/json" } });
-    if (!rep.ok) continue;
+    const rep = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10000) }).catch(() => null);
+    if (!rep || !rep.ok) return null;
     reussies++;
     const corps = await rep.json().catch(() => ({}));
-    // deno-lint-ignore no-explicit-any
-    for (const i of (Array.isArray(corps?.items) ? corps.items : []) as any[]) {
-      if (offres.length >= 8) break;
+    return Array.isArray(corps?.items) ? corps.items : [];
+  };
+  // deno-lint-ignore no-explicit-any
+  const garder = (items: any[], maison: boolean, max: number) => {
+    for (const i of items) {
+      if (offres.length >= max) break;
       const prixOffre = Number(i.current_price);
       const banniere = String(i.merchant_name ?? "").trim();
       const nom = String(i.name ?? "").trim();
@@ -91,8 +128,8 @@ async function chercher(p: Produit, codePostal: string, exclure: Set<string>): P
       const cle = `${normaliser(banniere)}|${normaliser(nom)}|${prixOffre}`;
       if (vues.has(cle)) continue;
       const texteOffre = ` ${normaliser(nom)} `;
-      // Premier tri, large : la marque (si connue) et au moins un mot du nom doivent se retrouver dans l'offre.
-      if (motsMarque.length && !motsMarque.some((m) => texteOffre.includes(` ${m} `))) continue;
+      // Premier tri, large : la marque (ou une marque maison d'un autre groupe) et au moins un mot du nom doivent se retrouver dans l'offre.
+      if (maison ? !autresMaison.some((m) => texteOffre.includes(` ${m} `)) : motsMarque.length && !motsMarque.some((m) => texteOffre.includes(` ${m} `))) continue;
       if (motsNom.length && !motsNom.some((m) => texteOffre.includes(m))) continue;
       vues.add(cle);
       const multiple = String(i.pre_price_text ?? "").match(/(\d+)\s*(?:pour|for|\/)/i);
@@ -101,14 +138,21 @@ async function chercher(p: Produit, codePostal: string, exclure: Set<string>): P
         banniere, nom, prixOffre, quantite, prix: Math.round((prixOffre / quantite) * 100) / 100,
         texte: [i.pre_price_text, i.post_price_text, i.sale_story].filter(Boolean).join(" · ") || null,
         debut: i.valid_from ?? null, fin: i.valid_to ?? null, image: i.clean_image_url ?? null,
-        verdict: "a_confirmer", format: null,
+        verdict: "a_confirmer", format: null, maison,
         lien: /^\d+$/.test(String(i.flyer_item_id ?? "")) ? `https://flipp.com/fr-ca/item/${i.flyer_item_id}` : null,
         circulaire: Number.isInteger(Number(i.flyer_id)) && Number(i.flyer_id) > 0 ? Number(i.flyer_id) : null,
         x: Number.isFinite(Number(i.left)) && Number.isFinite(Number(i.right)) ? (Number(i.left) + Number(i.right)) / 2 : null,
         page: null, pages: null,
       });
     }
+  };
+  for (const q of requetes) {
+    const items = await lire(q);
+    if (items) garder(items, false, 8);
   }
+  const listes = await Promise.all(requetesMaison.map(lire));
+  const limite = offres.length + 8;
+  for (const items of listes) if (items) garder(items, true, limite);
   if (!reussies) throw new Error("Flipp ne répond pas");
   return offres;
 }
@@ -125,7 +169,7 @@ const OUTIL = {
           type: "object",
           properties: {
             produit: { type: "integer" }, offre: { type: "integer" },
-            verdict: { type: "string", enum: ["identique", "proche", "non"] },
+            verdict: { type: "string", enum: ["identique", "equivalent", "proche", "non"] },
             format: { type: ["string", "null"] },
           },
           required: ["produit", "offre", "verdict"],
@@ -139,6 +183,7 @@ const OUTIL = {
 const CONSIGNE = `Tu compares des produits d'épicerie relevés en magasin au Québec à des offres de circulaires.
 Pour chaque paire (produit, offre), dis si l'offre concerne le même produit :
 - identique : même marque, même produit, même variété, et le format écrit dans l'offre est le même que celui du produit.
+- equivalent : seulement si le produit est de marque maison (marqueMaison = true) et que l'offre est marquée maison = true : l'offre est le même type de produit, de même variété, sous la marque maison d'une autre bannière (ex. beurre d'arachide crémeux Selection et beurre d'arachide crémeux Great Value). Le format peut différer : la comparaison se fait au prix par unité.
 - proche : même marque et même type de produit, mais le format ou la variété diffère, ou le format n'est pas écrit dans l'offre. Comparable au prix par unité.
 - non : autre marque, autre type de produit, ou offre trop vague pour être comparée.
 format : le format de l'offre s'il est écrit dans son nom (ex. « 454 g »), sinon null.
@@ -177,8 +222,8 @@ Deno.serve(async (req) => {
     const { data: cle } = paires.length ? await sb.rpc("lire_cle_claude") : { data: null };
     if (cle) {
       const liste = produits.map((p, i) => ({
-        produit: i, nom: p.nom, marque: p.marque, format: p.format,
-        offres: trouvees[i].map((o, k) => ({ offre: k, nom: o.nom, banniere: o.banniere })),
+        produit: i, nom: p.nom, marque: p.marque, format: p.format, marqueMaison: groupeMaison(p.marque) !== null,
+        offres: trouvees[i].map((o, k) => ({ offre: k, nom: o.nom, banniere: o.banniere, maison: o.maison })),
       })).filter((p) => p.offres.length);
       const rep = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -199,6 +244,8 @@ Deno.serve(async (req) => {
             trouvees[p] = offres.flatMap((o, k) => {
               const v = verdicts.get(`${p}-${k}`);
               if (!v || v.verdict === "non") return []; // non jugée ou différente : écartée
+              // Une offre de marque maison d'un autre groupe ne peut être qu'« équivalente » ; les autres, identiques ou proches.
+              if (o.maison) return v.verdict === "equivalent" || v.verdict === "identique" ? [{ ...o, verdict: "equivalent" as const, format: v.format }] : [];
               return [{ ...o, verdict: v.verdict === "identique" ? "identique" as const : "proche" as const, format: v.format }];
             });
           });

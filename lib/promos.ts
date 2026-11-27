@@ -4,7 +4,8 @@ import { prixParUnite, texteUnite } from "./unite";
 /** Offre d'une circulaire renvoyée par la recherche (fonction « promos »). */
 export type Offre = {
   banniere: string; nom: string; prix: number; prixOffre: number; quantite: number; texte: string | null;
-  debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "proche" | "a_confirmer"; format: string | null;
+  debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "equivalent" | "proche" | "a_confirmer"; format: string | null;
+  maison?: boolean; // marque maison équivalente d'une autre bannière
   lien?: string | null; // page de l'offre dans la circulaire en ligne
   page?: number | null; pages?: number | null; // page de l'offre et nombre de pages de la circulaire
 };
@@ -74,4 +75,12 @@ export function lienSite(banniere: string, produit: { marque?: string | null; pr
   return site
     ? { libelle: `Voir sur le site de ${banniere}`, href: site(q) }
     : { libelle: `Chercher chez ${banniere} sur le web`, href: `https://www.google.com/search?q=${encodeURIComponent(`${banniere} Québec`)}+${q}` };
+}
+
+/** Libellé et style de l'étiquette d'un verdict. */
+export function etiquetteVerdict(verdict: Offre["verdict"], compare: boolean): { texte: string; style: string } {
+  if (verdict === "identique") return { texte: "Identique", style: "baisse" };
+  if (verdict === "equivalent") return { texte: "Marque maison équivalente", style: "membre" };
+  if (verdict === "proche") return { texte: compare ? "Proche · comparé par unité" : "Proche · format à confirmer", style: "verif" };
+  return { texte: "À confirmer", style: "verif" };
 }

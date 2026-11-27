@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import type { Reference } from "@/lib/types";
-import { auQuebec, ecartPromo as ecart, emplacementOffre, imageOffre, lienSite, pctLisible as pct, type Offre } from "@/lib/promos";
+import { auQuebec, ecartPromo as ecart, etiquetteVerdict, emplacementOffre, imageOffre, lienSite, pctLisible as pct, type Offre } from "@/lib/promos";
 import Visionneuse from "./Visionneuse";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
@@ -186,9 +186,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
                     <div className="t">{o.banniere}</div>
                     <div className="s">{o.nom}</div>
                     <div className="s">{[o.quantite > 1 ? `${o.quantite} pour ${argent(o.prixOffre)}` : null, o.fin ? `jusqu'au ${dateLisible(new Date(o.fin).toLocaleDateString("en-CA"))}` : null, e?.parUnite].filter(Boolean).join(" · ")}</div>
-                    <span className={`pill ${o.verdict === "identique" ? "baisse" : "verif"}`}>
-                      {o.verdict === "identique" ? "Identique" : o.verdict === "proche" ? (e ? "Proche · comparé par unité" : "Proche · format à confirmer") : "À confirmer"}
-                    </span>
+                    <span className={`pill ${etiquetteVerdict(o.verdict, e !== null).style}`}>{etiquetteVerdict(o.verdict, e !== null).texte}</span>
                     {emplacementOffre(o) && <> <span className={`pill ${o.page === 1 || o.page === o.pages ? "promo" : "membre"}`}>{emplacementOffre(o)}</span></>}
                   </div>
                   <div className="r">

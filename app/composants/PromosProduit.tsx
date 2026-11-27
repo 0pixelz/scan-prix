@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { prixEffectif } from "@/lib/comparaison";
-import { auQuebec, ecartPromo, emplacementOffre, imageOffre, lienSite, pctLisible, type Offre } from "@/lib/promos";
+import { auQuebec, ecartPromo, etiquetteVerdict, emplacementOffre, imageOffre, lienSite, pctLisible, type Offre } from "@/lib/promos";
 import type { Scan } from "@/lib/types";
 import { IChevron, PastilleBanniere, argent, dateLisible } from "./ui";
 
@@ -107,7 +107,7 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
           {...(lien ? { href: lien, target: "_blank", rel: "noopener noreferrer", "aria-label": site.libelle } : {})}>
           <PastilleBanniere banniere={o.banniere} doux />
           <div className="mid">
-            <div className="t">{o.banniere} <span className={`pill ${o.verdict === "identique" ? "baisse" : "verif"}`}>{o.verdict === "identique" ? "Identique" : o.verdict === "proche" ? "Proche" : "À confirmer"}</span>
+            <div className="t">{o.banniere} <span className={`pill ${etiquetteVerdict(o.verdict, true).style}`}>{o.verdict === "proche" ? "Proche" : etiquetteVerdict(o.verdict, true).texte}</span>
               {emplacementOffre(o) && <> <span className={`pill ${o.page === 1 || o.page === o.pages ? "promo" : "membre"}`}>{emplacementOffre(o)}</span></>}
             </div>
             <div className="s">{o.nom}</div>

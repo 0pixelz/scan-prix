@@ -6,7 +6,7 @@ import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type G
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
-import { chercherImage, cleImage, dejaEssaye, imageEnGrand, noterEssai, sourceImage } from "@/lib/image";
+import { chercherImage, cleImage, imageEnGrand, noterEssai, sourceImage } from "@/lib/image";
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
@@ -271,18 +271,34 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   // Photo du vrai produit : celle déjà trouvée, sinon cherchée par le code-barres
   const [imageP, setImageP] = useState<string | null>(scan.image_produit ?? null);
   const [produitAgrandi, setProduitAgrandi] = useState(false);
+  const [recherchePhoto, setRecherchePhoto] = useState<"" | "cours" | "rien">("");
+  // À l'ouverture de la fiche, la photo est toujours cherchée si elle manque (une fois par session pour un même
+  // produit), puis gardée avec le prix pour s'afficher d'emblée les fois suivantes.
   useEffect(() => {
-    if (scan.image_produit || dejaEssaye(cleImage(scan))) return;
+    if (scan.image_produit || !(scan.cup || scan.produit)) return;
+    const cle = `scanprix.photo.${cleImage(scan)}`;
+    try { if (sessionStorage.getItem(cle)) return; } catch { /* stockage indisponible */ }
     let annule = false;
-    chercherImage(sb, scan, codePostal).then((url) => {
-      if (url !== undefined) noterEssai(cleImage(scan));
-      if (!annule && url) setImageP(url);
+    setRecherchePhoto("cours");
+    chercherImage(sb, scan, codePostal).then(async (url) => {
+      if (url !== undefined) {
+        noterEssai(cleImage(scan));
+        try { sessionStorage.setItem(cle, "1"); } catch { /* stockage indisponible */ }
+      }
+      if (annule) return;
+      setRecherchePhoto("");
+      if (!url) return;
+      setImageP(url);
+      if (!lecture) {
+        const { data } = await sb.from("scans").update({ image_produit: url }).eq("id", scan.id).select().single();
+        if (data && !annule) enregistre(data as Scan, true);
+      }
     });
     return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scan.image_produit, scan.cup, scan.produit, scan.marque, scan.format]);
 
   // Recherche à la demande : ignore la mémoire des essais (un produit sans photo il y a une semaine peut en avoir une aujourd'hui).
-  const [recherchePhoto, setRecherchePhoto] = useState<"" | "cours" | "rien">("");
   async function chercherPhoto() {
     setRecherchePhoto("cours");
     const url = await chercherImage(sb, scan, codePostal);
