@@ -3,7 +3,7 @@ import { cupNormalise } from "@/lib/comparaison";
 import type { Reference, ScanAvecVisite } from "@/lib/types";
 import { logoBanniere } from "@/lib/bannieres";
 
-export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C", "Pharmaprix", "Adonis", "Jean Coutu"];
+export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C", "Pharmaprix", "Adonis", "Jean Coutu", "Tigre Géant"];
 
 export { logoBanniere };
 
