@@ -605,3 +605,5 @@ input.lien-partage { margin-top: 10px; font-size: 13px; }
 .en-circulaire span.hausse { font-weight: 600; }
 .promos-produit > .row button { padding: 6px 12px; font-size: 13px; min-height: 0; flex: none; }
 .en-circulaire { flex-wrap: wrap; }
+.promos-produit .source { display: flex; align-items: center; gap: 8px; }
+.promos-produit .source img { width: 22px; height: 22px; border-radius: 6px; flex: none; }

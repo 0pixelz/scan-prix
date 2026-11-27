@@ -107,7 +107,12 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
           </div>
         </div>
       ))}
-      {garde && !occupe && offres.length > 0 && <small className="source">Source : circulaires Flipp (non officielle), à confirmer. Écart par rapport à ton prix de {argent(prix)}.</small>}
+      {garde && !occupe && offres.length > 0 && (
+        <small className="source">
+          <img src="/bannieres/reebee.webp" alt="reebee" />
+          <span>Circulaires de Flipp et reebee (même plateforme, source non officielle), à confirmer. Écart par rapport à ton prix de {argent(prix)}.</span>
+        </small>
+      )}
     </div>
   );
 }
