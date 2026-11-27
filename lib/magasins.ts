@@ -15,10 +15,10 @@ export async function magasinsProches(banniere: string, ici: { latitude: number;
   const lat = Math.round(ici.latitude * 20) / 20;
   const lon = Math.round(ici.longitude * 20) / 20;
   const zone = [lon - 0.25, lat + 0.17, lon + 0.25, lat - 0.17].map((v) => v.toFixed(2)).join(",");
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(banniere)}&viewbox=${zone}&bounded=1&limit=40&addressdetails=1&accept-language=fr&countrycodes=ca`;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(banniere)}&viewbox=${zone}&bounded=1&limit=40&addressdetails=1&extratags=1&accept-language=fr&countrycodes=ca`;
   const rep = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
   if (!rep.ok) return [];
-  const lieux = (await rep.json()) as { name?: string; category?: string; lat: string; lon: string; address?: Record<string, string> }[];
+  const lieux = (await rep.json()) as { name?: string; category?: string; lat: string; lon: string; address?: Record<string, string>; extratags?: Record<string, string> | null }[];
   const vus = new Set<string>();
   return lieux
     // Seulement des commerces (ou pharmacies) qui portent le nom de la bannière : pas de station de métro ni d'entrepôt.
@@ -26,7 +26,20 @@ export async function magasinsProches(banniere: string, ici: { latitude: number;
     .map((l) => {
       const a = l.address ?? {};
       const ville = a.city ?? a.town ?? a.village ?? a.municipality ?? a.suburb ?? "";
-      const nom = [ville, a.road].filter(Boolean).join(" · ");
+      // Nom propre du magasin quand la carte le donne (« Metro Plus Dépatie », « Metro Famille Thibault ») : le nom
+      // inscrit s'il dit plus que la bannière, sinon l'exploitant (le marchand propriétaire) ou le nom officiel.
+      // À défaut, la rue.
+      const e = l.extratags ?? {};
+      const generique = (t: string) => ["", "plus", "marche", "supermarche", "pharmacie"].includes(simple(t).replace(cle, ""));
+      const societe = (t: string) => /\b(inc|ltee|ltd|limited|corporation|corp|loblaws?|sobeys|walmart|costco)\b/i.test(t.normalize("NFD").replace(/[^a-zA-Z ]/g, " "));
+      const inscrit = (l.name ?? "").trim();
+      const exploitant = (e.operator ?? "").trim();
+      const brut = !generique(inscrit) ? inscrit
+        : exploitant && !generique(exploitant) && !societe(exploitant) ? (simple(exploitant).includes(cle) ? exploitant : `${inscrit} ${exploitant}`)
+        : [e.official_name, e.alt_name, e.short_name].find((x) => x && simple(x).includes(cle) && !generique(x)) ?? "";
+      // « Metro famille Thibeault Mirabel » : la ville est déjà devant, on ne la répète pas.
+      const propre = ville && simple(brut).endsWith(simple(ville)) ? brut.slice(0, brut.length - ville.length).trim() : brut;
+      const nom = [ville, propre || a.road].filter(Boolean).join(" · ");
       return { nom, distance: distanceMetres(ici, { latitude: Number(l.lat), longitude: Number(l.lon) }) };
     })
     .filter((m) => m.nom && Number.isFinite(m.distance))
