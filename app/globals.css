@@ -668,3 +668,12 @@ button.nutri { display: flex; align-items: center; gap: 10px; width: 100%; min-h
 .nutri-details li em { font-style: normal; font-size: 11px; font-weight: 600; text-align: right; }
 .nutri-details li em.low { color: var(--ok); } .nutri-details li em.moderate { color: var(--warn); } .nutri-details li em.high { color: var(--bad); }
 .nutri-details > small { color: var(--muted); font-size: 11px; }
+
+/* Écart face à une bannière (Analyse > Tableau de bord) */
+.face { border-bottom: 1px solid var(--line); }
+.face:last-of-type { border-bottom: 0; }
+.face > button.indice { width: 100%; min-height: 0; border: 0; border-radius: 0; background: none; text-align: left; color: inherit; padding: 10px 0; font-weight: 400; }
+.face > button.indice > svg { width: 16px; height: 16px; flex: none; color: var(--muted); transition: transform 0.15s; }
+.face > button.indice[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.face-cats { padding: 0 0 10px 46px; font-size: 13px; display: grid; gap: 6px; }
+.face-cats b { font-variant-numeric: tabular-nums; }

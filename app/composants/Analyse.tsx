@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lireJeton, supabaseBrowser } from "@/lib/supabase";
-import { alertes, comparer, cupNormalise, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe } from "@/lib/comparaison";
+import { alertes, comparer, cupNormalise, ecartsFace, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { PromoCirculaire, Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
@@ -44,6 +44,8 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
   const [message, setMessage] = useState("");
   const [envoi, setEnvoi] = useState(false);
   const [confirmerVider, setConfirmerVider] = useState(false);
+  const [baseChoisie, setBaseChoisie] = useState<string | null>(null); // bannière de base de l'écart entre bannières
+  const [detailFace, setDetailFace] = useState<string | null>(null);
 
   const compterRefs = useCallback(async () => {
     const { count } = await sb.from("reference_prix").select("cup", { count: "exact", head: true });
@@ -209,6 +211,10 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
         const idx = indices(lignes);
         const stats = statsBannieres(scans);
         const maxIndice = Math.max(100, ...idx.map((i) => i.indice));
+        // Écart face à une bannière de base : Metro par défaut si elle a des produits en commun, sinon la première.
+        const bases = idx.map((i) => i.banniere);
+        const base = bases.find((b) => b === baseChoisie) ?? bases.find((b) => normaliser(b) === "metro") ?? bases[0] ?? null;
+        const face = base ? ecartsFace(lignes, base) : [];
         // Écart moyen de chaque bannière par rapport à la référence, sur les produits qui ont un prix de référence
         const ecartsRef = stats
           .map((s) => {
@@ -246,6 +252,46 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                     <div className="muted" style={{ marginTop: 8 }}>100 = moyenne des bannières sur les produits communs. Plus bas = moins cher.</div>
                   </>
                 )}
+              </div>
+            )}
+            {base && face.length > 0 && (
+              <div className="card">
+                <h2>Écart face à {base}</h2>
+                {bases.length > 2 && (
+                  <div className="chips" style={{ marginBottom: 6 }}>
+                    {bases.map((b) => (
+                      <button type="button" key={b} className={`chip ${b === base ? "on" : ""}`} onClick={() => { setBaseChoisie(b); setDetailFace(null); }}>{b}</button>
+                    ))}
+                  </div>
+                )}
+                {face.map((f) => (
+                  <div key={f.banniere} className="face">
+                    <button type="button" className="indice" aria-expanded={detailFace === f.banniere} onClick={() => setDetailFace(detailFace === f.banniere ? null : f.banniere)}>
+                      <PastilleBanniere banniere={f.banniere} doux />
+                      <div className="grow">
+                        <div className="row between">
+                          <b>{f.banniere}</b>
+                          <b className={f.pct < -0.05 ? "hausse" : f.pct > 0.05 ? "baisse" : ""}>{pct(f.pct)}</b>
+                        </div>
+                        <div className="muted">
+                          {Math.abs(f.pct) < 0.05 ? "même prix" : `${Math.abs(f.pct).toLocaleString("fr-CA", { maximumFractionDigits: 1 })} % ${f.pct < 0 ? "moins cher" : "plus cher"}`} que {base} · {f.produits} produit{f.produits > 1 ? "s" : ""} en commun
+                        </div>
+                      </div>
+                      <IChevron />
+                    </button>
+                    {detailFace === f.banniere && (
+                      <div className="face-cats">
+                        {f.categories.map((c) => (
+                          <div key={c.categorie} className="row between">
+                            <span>{c.categorie} <small className="muted">({c.produits})</small></span>
+                            <b className={c.pct < -0.05 ? "hausse" : c.pct > 0.05 ? "baisse" : ""}>{pct(c.pct)}</b>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div className="muted" style={{ marginTop: 8 }}>Moyenne des écarts produit par produit, au dernier prix relevé (promo comprise). Rouge = moins cher que {base}. Touche une bannière pour le détail par catégorie.</div>
               </div>
             )}
             {stats.length > 0 && (

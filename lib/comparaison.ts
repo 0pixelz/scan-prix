@@ -199,6 +199,41 @@ export function indices(lignes: LigneComparaison[]): IndiceBanniere[] {
     .sort((a, b) => a.indice - b.indice);
 }
 
+export type EcartBanniere = {
+  banniere: string; pct: number; produits: number; // écart moyen face à la bannière de base, sur les produits relevés aux deux endroits
+  categories: { categorie: string; pct: number; produits: number }[];
+};
+
+/**
+ * Écart de prix de chaque bannière face à une bannière de base (ex. « Maxi : -6 % face à Metro »),
+ * sur les produits relevés dans les deux : moyenne des écarts produit par produit, au dernier prix relevé (promo comprise).
+ */
+export function ecartsFace(lignes: LigneComparaison[], base: string): EcartBanniere[] {
+  const cleBase = normaliser(base);
+  const cumul = new Map<string, { banniere: string; ecarts: number[]; cats: Map<string, number[]> }>();
+  for (const l of lignes) {
+    const b = l.parBanniere.find((x) => normaliser(x.banniere) === cleBase);
+    if (!b || !(b.prix > 0)) continue;
+    for (const x of l.parBanniere) {
+      const cle = normaliser(x.banniere);
+      if (cle === cleBase) continue;
+      const c = cumul.get(cle) ?? { banniere: x.banniere, ecarts: [], cats: new Map<string, number[]>() };
+      const e = ((x.prix - b.prix) / b.prix) * 100;
+      c.ecarts.push(e);
+      const cat = l.groupe.categorie?.trim() || "Sans catégorie";
+      c.cats.set(cat, [...(c.cats.get(cat) ?? []), e]);
+      cumul.set(cle, c);
+    }
+  }
+  const moyenne = (v: number[]) => v.reduce((a, n) => a + n, 0) / v.length;
+  return [...cumul.values()]
+    .map((c) => ({
+      banniere: c.banniere, pct: moyenne(c.ecarts), produits: c.ecarts.length,
+      categories: [...c.cats.entries()].map(([categorie, v]) => ({ categorie, pct: moyenne(v), produits: v.length })).sort((a, b) => a.pct - b.pct),
+    }))
+    .sort((a, b) => a.pct - b.pct);
+}
+
 export type StatBanniere = { banniere: string; prix: number; promos: number; membres: number; visites: number };
 
 /** Nombre de prix, de promos et de visites par bannière. */
