@@ -1,5 +1,5 @@
 // Service worker de Scan Prix : permet d'ouvrir l'app sans réseau (les photos sont alors mises en attente).
-const CACHE = "scanprix-v1";
+const CACHE = "scanprix-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
