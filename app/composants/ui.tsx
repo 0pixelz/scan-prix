@@ -2,9 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cupNormalise } from "@/lib/comparaison";
 import type { Reference, ScanAvecVisite } from "@/lib/types";
 
-export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C"];
+export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C", "Pharmaprix"];
 
-const LOGOS = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro", "superc"];
+const LOGOS = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro", "superc", "pharmaprix"];
 
 /** Adresse du logo d'une bannière (fichiers fournis dans public/bannieres), ou null si on n'en a pas. */
 export function logoBanniere(banniere: string | null | undefined): string | null {
