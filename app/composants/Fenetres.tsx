@@ -11,6 +11,7 @@ import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
 import PromosProduit from "./PromosProduit";
+import { distanceLisible, magasinsProches, type MagasinProche } from "@/lib/magasins";
 import { BANNIERES, ICodeBarres, IPosition, IRecherche, PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, logoBanniere } from "./ui";
 
 /** Création d'une visite, ou modification d'une visite existante (bannière, magasin, date). */
@@ -76,6 +77,25 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
     else creee(data as Visite);
   }
 
+  // Une bannière choisie : on propose ses magasins les plus proches (OpenStreetMap). Le plus proche remplit le champ
+  // s'il est vide ou s'il venait déjà d'une proposition ; ce que l'utilisateur a tapé lui-même n'est jamais remplacé.
+  const [proches, setProches] = useState<MagasinProche[]>([]);
+  const propose = useRef<string | null>(null);
+  const demande = useRef(0);
+  async function proposerMagasins(b: string) {
+    setProches([]);
+    if (visite || !position) return;
+    const n = ++demande.current;
+    const liste = await magasinsProches(b, position).catch(() => []);
+    if (n !== demande.current) return;
+    setProches(liste);
+    setMagasin((actuel) => {
+      if (!liste.length || (actuel.trim() && actuel !== propose.current)) return actuel;
+      propose.current = liste[0].nom;
+      return liste[0].nom;
+    });
+  }
+
   // Une bannière choisie : la fenêtre descend jusqu'au bouton « Commencer ».
   const bas = useRef<HTMLDivElement>(null);
   const versLeBas = () => setTimeout(() => bas.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 60);
@@ -108,7 +128,7 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
         <label>Bannière</label>
         <div className="tuiles">
           {BANNIERES.map((b, i) => (
-            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { touche.current = true; setReconnu(null); setAutre(false); setBanniere(b); versLeBas(); }}>
+            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { touche.current = true; setReconnu(null); setAutre(false); setBanniere(b); versLeBas(); proposerMagasins(b); }}>
               {logoBanniere(b) ? (
                 <img className="logo" src={logoBanniere(b)!} alt="" />
               ) : (
@@ -125,6 +145,16 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
         {autre && <input style={{ marginTop: 10 }} value={banniere} onChange={(e) => setBanniere(e.target.value)} placeholder="Nom de la bannière" autoFocus={!visite} />}
         <label>Magasin (ville, succursale)</label>
         <input value={magasin} onChange={(e) => { touche.current = true; setMagasin(e.target.value); }} placeholder="Ex. Mirabel" />
+        {proches.length > 0 && (
+          <div className="proches">
+            {proches.map((m) => (
+              <button type="button" key={m.nom} className={magasin === m.nom ? "on" : ""} onClick={() => { propose.current = m.nom; setMagasin(m.nom); }}>
+                {m.nom} <small>{distanceLisible(m.distance)}</small>
+              </button>
+            ))}
+            <small>Magasins proches : © OpenStreetMap</small>
+          </div>
+        )}
         <label>Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
