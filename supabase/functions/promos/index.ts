@@ -19,7 +19,46 @@ type Offre = {
   banniere: string; nom: string; prix: number; prixOffre: number; quantite: number; texte: string | null;
   debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "proche" | "a_confirmer"; format: string | null;
   lien: string | null; // page de l'offre dans la circulaire en ligne
+  circulaire: number | null; x: number | null; // circulaire et position horizontale de l'offre, pour trouver sa page
+  page: number | null; pages: number | null; // page de l'offre et nombre de pages de la circulaire
 };
+
+// Pages d'une circulaire (bornes gauche et droite de chacune), gardées en mémoire tant que la fonction reste active.
+const pagesConnues = new Map<number, { g: number; d: number; n: number }[]>();
+async function pagesDe(circulaire: number) {
+  const connues = pagesConnues.get(circulaire);
+  if (connues) return connues;
+  try {
+    const rep = await fetch(`https://backflipp.wishabi.com/flipp/flyers/${circulaire}?locale=fr-ca`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+    if (!rep.ok) return null;
+    const corps = await rep.json();
+    // deno-lint-ignore no-explicit-any
+    const pages = (Array.isArray(corps?.pages) ? corps.pages : []).map((p: any) => ({ g: Number(p.left), d: Number(p.right), n: Number(p.page) }))
+      .filter((p: { g: number; d: number; n: number }) => Number.isFinite(p.g) && Number.isFinite(p.d) && Number.isInteger(p.n) && p.n > 0);
+    if (!pages.length) return null;
+    pagesConnues.set(circulaire, pages);
+    return pages as { g: number; d: number; n: number }[];
+  } catch {
+    return null;
+  }
+}
+
+/** Note sur chaque offre sa page dans la circulaire (première, dernière ou intérieur). Sans réponse, rien n'est noté. */
+async function situer(offres: Offre[]) {
+  const ids = [...new Set(offres.map((o) => o.circulaire).filter((c): c is number => c !== null))].slice(0, 20);
+  const trouvees = new Map<number, { g: number; d: number; n: number }[] | null>();
+  await Promise.all(ids.map(async (id) => { trouvees.set(id, await pagesDe(id)); }));
+  for (const o of offres) {
+    const pages = o.circulaire !== null ? trouvees.get(o.circulaire) : null;
+    if (!pages || o.x === null) continue;
+    const x = o.x;
+    const p = pages.find((q) => x >= q.g && x < q.d);
+    if (p) {
+      o.page = p.n;
+      o.pages = Math.max(...pages.map((q) => q.n));
+    }
+  }
+}
 
 async function chercher(p: Produit, codePostal: string, exclure: Set<string>): Promise<Offre[]> {
   const motsNom = mots(p.nom);
@@ -64,6 +103,9 @@ async function chercher(p: Produit, codePostal: string, exclure: Set<string>): P
         debut: i.valid_from ?? null, fin: i.valid_to ?? null, image: i.clean_image_url ?? null,
         verdict: "a_confirmer", format: null,
         lien: /^\d+$/.test(String(i.flyer_item_id ?? "")) ? `https://flipp.com/fr-ca/item/${i.flyer_item_id}` : null,
+        circulaire: Number.isInteger(Number(i.flyer_id)) && Number(i.flyer_id) > 0 ? Number(i.flyer_id) : null,
+        x: Number.isFinite(Number(i.left)) && Number.isFinite(Number(i.right)) ? (Number(i.left) + Number(i.right)) / 2 : null,
+        page: null, pages: null,
       });
     }
   }
@@ -164,6 +206,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    await situer(trouvees.flat());
     return json({ resultats: produits.map((p, i) => ({ id: p.id, offres: trouvees[i] })), juge, pannes });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : "Erreur inconnue" });

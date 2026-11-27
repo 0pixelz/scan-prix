@@ -6,7 +6,16 @@ export type Offre = {
   banniere: string; nom: string; prix: number; prixOffre: number; quantite: number; texte: string | null;
   debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "proche" | "a_confirmer"; format: string | null;
   lien?: string | null; // page de l'offre dans la circulaire en ligne
+  page?: number | null; pages?: number | null; // page de l'offre et nombre de pages de la circulaire
 };
+
+/** Emplacement de l'offre dans la circulaire : première page, dernière page ou intérieur. */
+export function emplacementOffre(o: Pick<Offre, "page" | "pages">): string | null {
+  if (!o.page || !o.pages || o.page > o.pages) return null;
+  if (o.page === 1) return "Première page";
+  if (o.page === o.pages) return "Dernière page";
+  return `Intérieur · p. ${o.page} de ${o.pages}`;
+}
 
 /** Lien d'une offre, seulement s'il mène bien à la circulaire en ligne. */
 /** Image de l'offre telle qu'imprimée dans la circulaire, si elle vient bien du service de circulaires. */

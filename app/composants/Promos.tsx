@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import type { Reference } from "@/lib/types";
-import { ecartPromo as ecart, imageOffre, lienSite, pctLisible as pct, type Offre } from "@/lib/promos";
+import { ecartPromo as ecart, emplacementOffre, imageOffre, lienSite, pctLisible as pct, type Offre } from "@/lib/promos";
 import Visionneuse from "./Visionneuse";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
@@ -91,7 +91,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
             visite_id: visiteId, produit: p.groupe.nom, marque: p.groupe.marque, format: p.groupe.format, cup: p.groupe.cup,
             mon_prix: p.prix, source_prix: p.source, banniere: o.banniere, offre: o.nom, prix: o.prix, prix_offre: o.prixOffre,
             quantite: o.quantite, format_offre: o.format, verdict: o.verdict, ecart_pct: e ? Math.round(e.pct * 10) / 10 : null,
-            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienSite(o.banniere, { marque: p.groupe.marque, produit: p.groupe.nom }).href,
+            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienSite(o.banniere, { marque: p.groupe.marque, produit: p.groupe.nom }).href, emplacement: emplacementOffre(o),
           };
         }));
         const anciennes = sb.from("promos_circulaires").delete();
@@ -189,6 +189,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
                     <span className={`pill ${o.verdict === "identique" ? "baisse" : "verif"}`}>
                       {o.verdict === "identique" ? "Identique" : o.verdict === "proche" ? (e ? "Proche · comparé par unité" : "Proche · format à confirmer") : "À confirmer"}
                     </span>
+                    {emplacementOffre(o) && <> <span className={`pill ${o.page === 1 || o.page === o.pages ? "promo" : "membre"}`}>{emplacementOffre(o)}</span></>}
                   </div>
                   <div className="r">
                     <b>{argent(o.prix)}</b>

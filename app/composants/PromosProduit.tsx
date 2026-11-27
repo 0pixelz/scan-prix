@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { prixEffectif } from "@/lib/comparaison";
-import { ecartPromo, imageOffre, lienSite, pctLisible, type Offre } from "@/lib/promos";
+import { ecartPromo, emplacementOffre, imageOffre, lienSite, pctLisible, type Offre } from "@/lib/promos";
 import type { Scan } from "@/lib/types";
 import { IChevron, PastilleBanniere, argent, dateLisible } from "./ui";
 
@@ -55,7 +55,7 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
             visite_id: scan.visite_id, produit: scan.produit, marque: scan.marque, format: scan.format, cup: scan.cup,
             mon_prix: prix, source_prix: `Relevé ${banniere ?? ""}`.trim(), banniere: o.banniere, offre: o.nom, prix: o.prix, prix_offre: o.prixOffre,
             quantite: o.quantite, format_offre: o.format, verdict: o.verdict, ecart_pct: e ? Math.round(e.pct * 10) / 10 : null,
-            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienSite(o.banniere, scan).href,
+            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienSite(o.banniere, scan).href, emplacement: emplacementOffre(o),
           };
         });
         if (!e1 && lignes.length) await sb.from("promos_circulaires").insert(lignes);
@@ -107,7 +107,9 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
           {...(lien ? { href: lien, target: "_blank", rel: "noopener noreferrer", "aria-label": site.libelle } : {})}>
           <PastilleBanniere banniere={o.banniere} doux />
           <div className="mid">
-            <div className="t">{o.banniere} <span className={`pill ${o.verdict === "identique" ? "baisse" : "verif"}`}>{o.verdict === "identique" ? "Identique" : o.verdict === "proche" ? "Proche" : "À confirmer"}</span></div>
+            <div className="t">{o.banniere} <span className={`pill ${o.verdict === "identique" ? "baisse" : "verif"}`}>{o.verdict === "identique" ? "Identique" : o.verdict === "proche" ? "Proche" : "À confirmer"}</span>
+              {emplacementOffre(o) && <> <span className={`pill ${o.page === 1 || o.page === o.pages ? "promo" : "membre"}`}>{emplacementOffre(o)}</span></>}
+            </div>
             <div className="s">{o.nom}</div>
             <div className="s">{[o.quantite > 1 ? `${o.quantite} pour ${argent(o.prixOffre)}` : null, o.fin ? `jusqu'au ${dateLisible(new Date(o.fin).toLocaleDateString("en-CA"))}` : null, e?.parUnite].filter(Boolean).join(" · ")}</div>
           </div>

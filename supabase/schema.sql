@@ -705,3 +705,6 @@ end $$;
 
 -- Lien vers l'offre dans la circulaire en ligne (page Flipp de l'article).
 alter table public.promos_circulaires add column if not exists lien text;
+
+-- Emplacement de l'offre dans la circulaire : première page, dernière page ou intérieur.
+alter table public.promos_circulaires add column if not exists emplacement text;
