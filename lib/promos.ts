@@ -1,5 +1,5 @@
 import { cupNormalise, normaliser } from "./comparaison";
-import { lireFormat, prixParUnite, texteUnite } from "./unite";
+import { prixParUnite, texteUnite } from "./unite";
 
 /** Offre d'une circulaire renvoyée par la recherche (fonction « promos »). */
 export type Offre = {
@@ -16,12 +16,6 @@ export function emplacementOffre(o: Pick<Offre, "page" | "pages">): string | nul
   if (o.page === 1) return "Front page";
   if (o.page === o.pages) return "Back page";
   return `Intérieur · p. ${o.page}`;
-}
-
-/** Format économique : l'offre est le même produit dans un format nettement plus gros que le mien (au moins 25 % de plus). */
-export function formatEconomique(monFormat: string | null | undefined, formatOffre: string | null | undefined): boolean {
-  const a = lireFormat(monFormat), b = lireFormat(formatOffre);
-  return !!a && !!b && a.base === b.base && a.quantite > 0 && b.quantite >= a.quantite * 1.25;
 }
 
 /** Lien d'une offre, seulement s'il mène bien à la circulaire en ligne. */
