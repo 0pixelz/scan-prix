@@ -39,7 +39,13 @@ export async function magasinsProches(banniere: string, ici: { latitude: number;
         : [e.official_name, e.alt_name, e.short_name].find((x) => x && simple(x).includes(cle) && !generique(x)) ?? "";
       // « Metro famille Thibeault Mirabel » : la ville est déjà devant, on ne la répète pas.
       const propre = ville && simple(brut).endsWith(simple(ville)) ? brut.slice(0, brut.length - ville.length).trim() : brut;
-      const nom = [ville, propre || a.road].filter(Boolean).join(" · ");
+      // Sans nom propre (ex. Dollarama, dont les magasins n'en ont pas) : le secteur de la ville, puis le centre
+      // commercial s'il y en a un, sinon l'adresse.
+      const secteur = [a.suburb, a.neighbourhood, a.quarter].find((x) => x && x !== ville && !/^district\b/i.test(x)) ?? "";
+      const centre = a.retail ?? a.mall ?? a.commercial ?? "";
+      const adresse = [a.house_number, a.road].filter(Boolean).join(" ");
+      const lieu = propre || [secteur, centre || adresse].filter(Boolean).join(" · ");
+      const nom = [ville, lieu].filter(Boolean).join(" · ");
       return { nom, distance: distanceMetres(ici, { latitude: Number(l.lat), longitude: Number(l.lon) }) };
     })
     .filter((m) => m.nom && Number.isFinite(m.distance))
