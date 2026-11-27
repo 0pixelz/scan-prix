@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import type { Reference } from "@/lib/types";
-import { ecartPromo as ecart, emplacementOffre, imageOffre, lienSite, pctLisible as pct, type Offre } from "@/lib/promos";
+import { auQuebec, ecartPromo as ecart, emplacementOffre, imageOffre, lienSite, pctLisible as pct, type Offre } from "@/lib/promos";
 import Visionneuse from "./Visionneuse";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
@@ -80,7 +80,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
       if (error) throw new Error("Service de recherche indisponible. Vérifie ta connexion et réessaie.");
       if (data.acces === false) return refuse();
       if (data.error) throw new Error(data.error);
-      const r: Resultat = { quand: Date.now(), juge: data.juge === true, offres: Object.fromEntries((data.resultats as { id: string; offres: Offre[] }[]).map((x) => [x.id, x.offres])) };
+      const r: Resultat = { quand: Date.now(), juge: data.juge === true, offres: Object.fromEntries((data.resultats as { id: string; offres: Offre[] }[]).map((x) => [x.id, x.offres.filter((o) => auQuebec(o.banniere))])) };
       setResultat(r);
       try { sessionStorage.setItem(cle, JSON.stringify(r)); } catch { /* stockage indisponible */ }
       // La dernière recherche est gardée : elle alimente les alertes, l'Excel et le rapport de visite.

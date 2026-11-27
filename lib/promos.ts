@@ -52,7 +52,17 @@ const SITES: Record<string, (q: string) => string> = {
   iga: (q) => `https://www.iga.net/fr/search?k=${q}`,
   walmart: (q) => `https://www.walmart.ca/fr/search?q=${q}`,
   costco: (q) => `https://www.costco.ca/CatalogSearch?dept=All&langId=-25&keyword=${q}`,
+  pharmaprix: (q) => `https://www.pharmaprix.ca/fr/search?text=${q}`, // site québécois (Shoppers Drug Mart ailleurs au Canada)
 };
+
+// Bannières absentes du Québec : leurs offres sont écartées, même si une circulaire d'une autre province remonte.
+const HORS_QUEBEC = new Set([
+  "shoppersdrugmart", "foodbasics", "nofrills", "freshco", "loblaws", "realcanadiansuperstore", "zehrs", "fortinos",
+  "yourindependentgrocer", "valumart", "freshmart", "sobeys", "foodland", "farmboy", "longos", "rexall", "safeway",
+  "saveonfoods", "atlanticsuperstore", "dominion", "londondrugs", "thriftyfoods", "coop", "wholesaleclub", "nations",
+]);
+/** Vrai si la bannière a des magasins au Québec (ou n'est pas connue comme absente du Québec). */
+export const auQuebec = (banniere: string) => !HORS_QUEBEC.has(sansAccent(banniere));
 
 /**
  * Lien vers le produit sur le site du concurrent : la recherche de son site avec la marque et le nom du produit.
@@ -63,5 +73,5 @@ export function lienSite(banniere: string, produit: { marque?: string | null; pr
   const site = SITES[sansAccent(banniere)];
   return site
     ? { libelle: `Voir sur le site de ${banniere}`, href: site(q) }
-    : { libelle: `Chercher chez ${banniere} sur le web`, href: `https://www.google.com/search?q=${encodeURIComponent(banniere)}+${q}` };
+    : { libelle: `Chercher chez ${banniere} sur le web`, href: `https://www.google.com/search?q=${encodeURIComponent(`${banniere} Québec`)}+${q}` };
 }

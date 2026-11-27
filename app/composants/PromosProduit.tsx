@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { prixEffectif } from "@/lib/comparaison";
-import { ecartPromo, emplacementOffre, imageOffre, lienSite, pctLisible, type Offre } from "@/lib/promos";
+import { auQuebec, ecartPromo, emplacementOffre, imageOffre, lienSite, pctLisible, type Offre } from "@/lib/promos";
 import type { Scan } from "@/lib/types";
 import { IChevron, PastilleBanniere, argent, dateLisible } from "./ui";
 
@@ -41,7 +41,7 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
         body: { codePostal, exclure: banniere ? [banniere] : [], produits: [{ id: scan.id, nom: scan.produit, marque: scan.marque, format: scan.format }] },
       });
       if (error || !data || data.error || data.acces === false) throw new Error(data?.error ?? "Recherche de circulaires indisponible pour l'instant.");
-      const offres = ((data.resultats?.[0]?.offres ?? []) as Offre[]);
+      const offres = ((data.resultats?.[0]?.offres ?? []) as Offre[]).filter((o) => auQuebec(o.banniere));
       const g: Garde = { quand: Date.now(), juge: data.juge === true, offres };
       setGarde(g);
       try { sessionStorage.setItem(cle, JSON.stringify(g)); } catch { /* stockage indisponible */ }
