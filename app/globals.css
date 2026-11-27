@@ -677,3 +677,12 @@ button.nutri { display: flex; align-items: center; gap: 10px; width: 100%; min-h
 .face > button.indice[aria-expanded="true"] > svg { transform: rotate(180deg); }
 .face-cats { padding: 0 0 10px 46px; font-size: 13px; display: grid; gap: 6px; }
 .face-cats b { font-variant-numeric: tabular-nums; }
+
+/* Indices panier et régulier côte à côte */
+.deux-indices { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin-top: 4px; font-size: 13px; }
+.deux-indices small { color: var(--muted); font-size: 12px; }
+.deux-indices .bar { margin: 4px 0 3px; }
+.deux-indices .bar.reg i { background: var(--text); opacity: 0.55; }
+.deux-indices .muted { font-size: 11.5px; }
+.face-cats .cols { display: grid; grid-template-columns: 62px 62px; gap: 6px; text-align: right; flex: none; }
+.face-cats .row > span:first-child { min-width: 0; }

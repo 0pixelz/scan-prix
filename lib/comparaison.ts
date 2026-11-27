@@ -94,15 +94,21 @@ export type LigneComparaison = {
   ecartPct: number;
 };
 
-/** Pour chaque produit, le dernier prix relevé dans chaque bannière. */
-export function comparer(groupes: Groupe[]): LigneComparaison[] {
+/** Prix régulier seulement, sans la promo. */
+export const prixRegulier = (s: Scan): number | null => (s.prix_regulier === null || s.prix_regulier === undefined ? null : Number(s.prix_regulier));
+
+/**
+ * Pour chaque produit, le dernier prix relevé dans chaque bannière.
+ * Par défaut au prix payé (promo comprise) ; avec prixRegulier, au prix régulier seulement.
+ */
+export function comparer(groupes: Groupe[], prixDe: (s: Scan) => number | null = prixEffectif): LigneComparaison[] {
   const lignes: LigneComparaison[] = [];
   for (const groupe of groupes) {
     const vus = new Map<string, { banniere: string; obs: ScanAvecVisite; prix: number }>();
     for (const obs of groupe.observations) {
       const banniere = obs.visites?.banniere?.trim();
-      const prix = prixEffectif(obs);
-      if (!banniere || prix === null) continue;
+      const prix = prixDe(obs);
+      if (!banniere || prix === null || !(prix > 0)) continue;
       const cle = normaliser(banniere);
       if (!vus.has(cle)) vus.set(cle, { banniere, obs, prix }); // observations triées : la première est la plus récente
     }

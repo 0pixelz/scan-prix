@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { lireJeton, supabaseBrowser } from "@/lib/supabase";
-import { alertes, comparer, cupNormalise, ecartsFace, grouper, indices, normaliser, prixEffectif, statsBannieres, variations, type Groupe } from "@/lib/comparaison";
+import { alertes, comparer, cupNormalise, ecartsFace, grouper, indices, normaliser, prixEffectif, prixRegulier, statsBannieres, variations, type Groupe } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import type { PromoCirculaire, Reference, ScanAvecVisite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
@@ -66,6 +66,7 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
 
   const groupes = useMemo(() => grouper(scans ?? []), [scans]);
   const lignes = useMemo(() => comparer(groupes), [groupes]);
+  const lignesReg = useMemo(() => comparer(groupes, prixRegulier), [groupes]); // au prix régulier seulement
   const changements = useMemo(() => variations(groupes), [groupes]);
   const mots = normaliser(recherche).split(" ").filter(Boolean);
   const correspond = (g: Groupe) => {
@@ -210,11 +211,17 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
       {vue === "tableau" && scans !== null && (() => {
         const idx = indices(lignes);
         const stats = statsBannieres(scans);
-        const maxIndice = Math.max(100, ...idx.map((i) => i.indice));
+        const idxReg = new Map(indices(lignesReg).map((i) => [normaliser(i.banniere), i]));
+        const maxIndice = Math.max(100, ...idx.map((i) => i.indice), ...[...idxReg.values()].map((i) => i.indice));
+        const minPanier = Math.min(...idx.map((i) => i.indice));
+        const minReg = Math.min(...[...idxReg.values()].map((i) => i.indice));
+        const nombre = (v: number) => v.toFixed(1).replace(".", ",");
         // Écart face à une bannière de base : Metro par défaut si elle a des produits en commun, sinon la première.
         const bases = idx.map((i) => i.banniere);
         const base = bases.find((b) => b === baseChoisie) ?? bases.find((b) => normaliser(b) === "metro") ?? bases[0] ?? null;
         const face = base ? ecartsFace(lignes, base) : [];
+        const faceReg = new Map((base ? ecartsFace(lignesReg, base) : []).map((f) => [normaliser(f.banniere), f]));
+        const couleur = (v: number) => (v < -0.05 ? "hausse" : v > 0.05 ? "baisse" : "");
         // Écart moyen de chaque bannière par rapport à la référence, sur les produits qui ont un prix de référence
         const ecartsRef = stats
           .map((s) => {
@@ -236,20 +243,30 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                   <div className="muted">Relève les mêmes produits dans au moins deux bannières pour obtenir un indice.</div>
                 ) : (
                   <>
-                    {idx.map((i, rang) => (
+                    {idx.map((i) => {
+                      const reg = idxReg.get(normaliser(i.banniere));
+                      return (
                       <div key={i.banniere} className="indice">
                         <PastilleBanniere banniere={i.banniere} doux />
                         <div className="grow">
-                          <div className="row between">
-                            <b>{i.banniere}</b>
-                            <b className={rang === 0 ? "baisse" : ""}>{i.indice.toFixed(1).replace(".", ",")}</b>
+                          <b>{i.banniere}</b>
+                          <div className="deux-indices">
+                            <div>
+                              <div className="row between"><small>Panier</small><b className={i.indice === minPanier && i.indice < 99.95 ? "baisse" : ""}>{nombre(i.indice)}</b></div>
+                              <div className="bar"><i style={{ width: `${(i.indice / maxIndice) * 100}%` }} /></div>
+                              <div className="muted">{i.produits} produit{i.produits > 1 ? "s" : ""}</div>
+                            </div>
+                            <div>
+                              <div className="row between"><small>Régulier</small><b className={reg && reg.indice === minReg && reg.indice < 99.95 ? "baisse" : ""}>{reg ? nombre(reg.indice) : "—"}</b></div>
+                              <div className="bar reg"><i style={{ width: `${reg ? (reg.indice / maxIndice) * 100 : 0}%` }} /></div>
+                              <div className="muted">{reg ? `${reg.produits} produit${reg.produits > 1 ? "s" : ""}` : "aucun prix régulier"}</div>
+                            </div>
                           </div>
-                          <div className="bar"><i style={{ width: `${(i.indice / maxIndice) * 100}%` }} /></div>
-                          <div className="muted">{i.produits} produit{i.produits > 1 ? "s" : ""} en commun</div>
                         </div>
                       </div>
-                    ))}
-                    <div className="muted" style={{ marginTop: 8 }}>100 = moyenne des bannières sur les produits communs. Plus bas = moins cher.</div>
+                      );
+                    })}
+                    <div className="muted" style={{ marginTop: 8 }}>100 = moyenne des bannières sur les produits communs. Plus bas = moins cher. Panier = prix payé, promo comprise. Régulier = prix régulier seulement.</div>
                   </>
                 )}
               </div>
@@ -264,34 +281,40 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                     ))}
                   </div>
                 )}
-                {face.map((f) => (
+                {face.map((f) => {
+                  const r = faceReg.get(normaliser(f.banniere));
+                  return (
                   <div key={f.banniere} className="face">
                     <button type="button" className="indice" aria-expanded={detailFace === f.banniere} onClick={() => setDetailFace(detailFace === f.banniere ? null : f.banniere)}>
                       <PastilleBanniere banniere={f.banniere} doux />
                       <div className="grow">
-                        <div className="row between">
-                          <b>{f.banniere}</b>
-                          <b className={f.pct < -0.05 ? "hausse" : f.pct > 0.05 ? "baisse" : ""}>{pct(f.pct)}</b>
+                        <b>{f.banniere}</b>
+                        <div className="deux-indices">
+                          <div className="row between"><small>Panier</small><b className={couleur(f.pct)}>{pct(f.pct)}</b></div>
+                          <div className="row between"><small>Régulier</small><b className={r ? couleur(r.pct) : ""}>{r ? pct(r.pct) : "—"}</b></div>
                         </div>
-                        <div className="muted">
-                          {Math.abs(f.pct) < 0.05 ? "même prix" : `${Math.abs(f.pct).toLocaleString("fr-CA", { maximumFractionDigits: 1 })} % ${f.pct < 0 ? "moins cher" : "plus cher"}`} que {base} · {f.produits} produit{f.produits > 1 ? "s" : ""} en commun
-                        </div>
+                        <div className="muted">{f.produits} produit{f.produits > 1 ? "s" : ""} en commun avec {base}</div>
                       </div>
                       <IChevron />
                     </button>
                     {detailFace === f.banniere && (
                       <div className="face-cats">
-                        {f.categories.map((c) => (
+                        <div className="row between muted"><span>Catégorie</span><span className="cols"><small>Panier</small><small>Régulier</small></span></div>
+                        {f.categories.map((c) => {
+                          const cr = r?.categories.find((x) => x.categorie === c.categorie);
+                          return (
                           <div key={c.categorie} className="row between">
                             <span>{c.categorie} <small className="muted">({c.produits})</small></span>
-                            <b className={c.pct < -0.05 ? "hausse" : c.pct > 0.05 ? "baisse" : ""}>{pct(c.pct)}</b>
+                            <span className="cols"><b className={couleur(c.pct)}>{pct(c.pct)}</b><b className={cr ? couleur(cr.pct) : ""}>{cr ? pct(cr.pct) : "—"}</b></span>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
-                ))}
-                <div className="muted" style={{ marginTop: 8 }}>Moyenne des écarts produit par produit, au dernier prix relevé (promo comprise). Rouge = moins cher que {base}. Touche une bannière pour le détail par catégorie.</div>
+                  );
+                })}
+                <div className="muted" style={{ marginTop: 8 }}>Moyenne des écarts produit par produit, au dernier prix relevé. Panier = promo comprise, Régulier = prix régulier seulement. Rouge = moins cher que {base}. Touche une bannière pour le détail par catégorie.</div>
               </div>
             )}
             {stats.length > 0 && (
