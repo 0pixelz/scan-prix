@@ -607,3 +607,7 @@ input.lien-partage { margin-top: 10px; font-size: 13px; }
 .en-circulaire { flex-wrap: wrap; }
 .promos-produit .source { display: flex; align-items: center; gap: 8px; }
 .promos-produit .source img { width: 22px; height: 22px; border-radius: 6px; flex: none; }
+.promos-produit a.offre { color: inherit; text-decoration: none; }
+.promos-produit a.offre > svg { width: 16px; height: 16px; flex: none; color: var(--muted); transform: rotate(-90deg); }
+.chercher-photo { display: block; margin: 4px 0 0; }
+button.chercher-photo { padding: 6px 0; min-height: 0; border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 600; text-align: left; }

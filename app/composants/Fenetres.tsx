@@ -282,7 +282,21 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
     return () => { annule = true; };
   }, [scan.image_produit, scan.cup, scan.produit, scan.marque, scan.format]);
 
-  // Mauvaise photo : on la retire, et le produit n'est pas recherché de nouveau avant 30 jours.
+  // Recherche à la demande : ignore la mémoire des essais (un produit sans photo il y a une semaine peut en avoir une aujourd'hui).
+  const [recherchePhoto, setRecherchePhoto] = useState<"" | "cours" | "rien">("");
+  async function chercherPhoto() {
+    setRecherchePhoto("cours");
+    const url = await chercherImage(sb, scan, codePostal);
+    if (!url) return setRecherchePhoto("rien");
+    setRecherchePhoto("");
+    setImageP(url);
+    if (!lecture) {
+      const { data } = await sb.from("scans").update({ image_produit: url }).eq("id", scan.id).select().single();
+      if (data) enregistre(data as Scan, true);
+    }
+  }
+
+  // Mauvaise photo : on la retire, et le produit n'est pas recherché de nouveau avant 7 jours.
   async function retirerImage() {
     noterEssai(cleImage(scan));
     setImageP(null);
@@ -313,6 +327,11 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
               {!lecture && <button type="button" className="lien" onClick={retirerImage}>Ce n'est pas le bon produit</button>}
             </div>
           </div>
+        )}
+        {!imageP && (scan.cup || scan.produit) && (
+          <button type="button" className="lien chercher-photo" disabled={recherchePhoto === "cours"} onClick={chercherPhoto}>
+            {recherchePhoto === "cours" ? "Recherche d'une photo…" : recherchePhoto === "rien" ? "Aucune photo trouvée. Réessayer" : "Chercher une photo du produit"}
+          </button>
         )}
         <PromosProduit scan={scan} banniere={banniere ?? null} codePostal={codePostal ?? ""} seuil={seuil ?? 5} lecture={lecture} change={promosChange} />
         {(unite || reference) && (

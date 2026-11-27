@@ -104,7 +104,7 @@ const lireEssais = (): Record<string, number> => {
 };
 export const cleImage = (s: { cup: string | null; produit: string | null; marque: string | null; format: string | null }) =>
   s.cup ? `cup:${s.cup}` : `desc:${s.marque}|${s.produit}|${s.format}`;
-export const dejaEssaye = (cle: string) => Date.now() - (lireEssais()[cle] ?? 0) < 30 * 86400000;
+export const dejaEssaye = (cle: string) => Date.now() - (lireEssais()[cle] ?? 0) < 7 * 86400000;
 export function noterEssai(cle: string) {
   try {
     const essais = Object.entries({ ...lireEssais(), [cle]: Date.now() }).sort((a, b) => b[1] - a[1]).slice(0, 3000);

@@ -263,7 +263,7 @@ function App({ refuse }: { refuse: () => void }) {
   useEffect(() => { chargerListe(); }, [chargerListe]);
 
   // Image du vrai produit pour les prix qui n'en ont pas : Google Images, circulaire, puis bases ouvertes.
-  // Un produit cherché sans succès n'est pas recherché de nouveau avant 30 jours (quota du service d'images).
+  // Un produit cherché sans succès n'est pas recherché de nouveau avant 7 jours (quota du service d'images).
   useEffect(() => {
     let annule = false;
     (async () => {

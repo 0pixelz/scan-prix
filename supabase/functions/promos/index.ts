@@ -11,13 +11,14 @@ const MODEL = Deno.env.get("ANTHROPIC_MODEL_RAPIDE") || "claude-haiku-5-5";
 const json = (o: unknown) => new Response(JSON.stringify(o), { headers: { ...cors, "Content-Type": "application/json" } });
 
 const VIDES = new Set(["de", "du", "des", "la", "le", "les", "et", "ou", "au", "aux", "en", "avec", "sans", "pour", "the", "and"]);
-const normaliser = (t: string) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+const normaliser = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 const mots = (t: string) => normaliser(t).split(" ").filter((m) => m.length >= 3 && !VIDES.has(m) && !/^\d+$/.test(m));
 
 type Produit = { id: string; nom: string; marque: string | null; format: string | null };
 type Offre = {
   banniere: string; nom: string; prix: number; prixOffre: number; quantite: number; texte: string | null;
   debut: string | null; fin: string | null; image: string | null; verdict: "identique" | "proche" | "a_confirmer"; format: string | null;
+  lien: string | null; // page de l'offre dans la circulaire en ligne
 };
 
 async function chercher(p: Produit, codePostal: string, exclure: Set<string>): Promise<Offre[]> {
@@ -62,6 +63,7 @@ async function chercher(p: Produit, codePostal: string, exclure: Set<string>): P
         texte: [i.pre_price_text, i.post_price_text, i.sale_story].filter(Boolean).join(" · ") || null,
         debut: i.valid_from ?? null, fin: i.valid_to ?? null, image: i.clean_image_url ?? null,
         verdict: "a_confirmer", format: null,
+        lien: /^\d+$/.test(String(i.flyer_item_id ?? "")) ? `https://flipp.com/fr-ca/item/${i.flyer_item_id}` : null,
       });
     }
   }

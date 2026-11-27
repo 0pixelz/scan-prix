@@ -702,3 +702,6 @@ begin
   insert into prive.invitations (jeton_hash) values (encode(sha256(convert_to(j, 'UTF8')), 'hex'));
   return jsonb_build_object('ok', true, 'invitation', j);
 end $$;
+
+-- Lien vers l'offre dans la circulaire en ligne (page Flipp de l'article).
+alter table public.promos_circulaires add column if not exists lien text;

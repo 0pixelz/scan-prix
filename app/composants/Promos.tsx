@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import type { Reference } from "@/lib/types";
-import { ecartPromo as ecart, pctLisible as pct, type Offre } from "@/lib/promos";
+import { ecartPromo as ecart, lienOffre, pctLisible as pct, type Offre } from "@/lib/promos";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
 import { IRecherche, PastilleBanniere, argent, dateLisible } from "./ui";
@@ -89,7 +89,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
             visite_id: visiteId, produit: p.groupe.nom, marque: p.groupe.marque, format: p.groupe.format, cup: p.groupe.cup,
             mon_prix: p.prix, source_prix: p.source, banniere: o.banniere, offre: o.nom, prix: o.prix, prix_offre: o.prixOffre,
             quantite: o.quantite, format_offre: o.format, verdict: o.verdict, ecart_pct: e ? Math.round(e.pct * 10) / 10 : null,
-            par_unite: e?.parUnite ?? null, fin: o.fin,
+            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienOffre(o.lien),
           };
         }));
         const anciennes = sb.from("promos_circulaires").delete();
@@ -171,7 +171,8 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
                 <div className="r"><b>{argent(p.prix)}</b><small>{p.source}</small></div>
               </div>
               {p.offres.map(({ o, e }, i) => (
-                <div key={i} className="tx" style={{ cursor: "default" }}>
+                <div key={i} className="tx" role={lienOffre(o.lien) ? "link" : undefined} style={{ cursor: lienOffre(o.lien) ? "pointer" : "default" }}
+                  onClick={() => { const l = lienOffre(o.lien); if (l) window.open(l, "_blank", "noopener,noreferrer"); }}>
                   <PastilleBanniere banniere={o.banniere} doux />
                   <div className="mid">
                     <div className="t">{o.banniere}</div>
