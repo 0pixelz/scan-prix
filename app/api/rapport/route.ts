@@ -23,6 +23,15 @@ const argent = (v: number | null) => (v === null ? "-" : `${v.toFixed(2).replace
 const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
 const dateLongue = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("fr-CA", { day: "numeric", month: "long", year: "numeric" });
 
+/** Date courte (« 2 déc. »), avec l'année si ce n'est pas l'année en cours. */
+const dateCourte = (d: string | null | undefined) => {
+  if (!d) return "";
+  const j = new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T12:00:00` : d);
+  if (Number.isNaN(j.getTime())) return "";
+  const annee = j.toLocaleDateString("fr-CA", { year: "numeric", timeZone: "America/Toronto" }) !== new Date().toLocaleDateString("fr-CA", { year: "numeric", timeZone: "America/Toronto" });
+  return j.toLocaleDateString("fr-CA", { day: "numeric", month: "short", ...(annee ? { year: "numeric" } : {}), timeZone: "America/Toronto" });
+};
+
 type Colonne = { titre: string; largeur: number; droite?: boolean };
 type Cellule = string | { texte: string; couleur?: ReturnType<typeof rgb>; logo?: PDFImage | null };
 
@@ -260,12 +269,13 @@ export async function GET(req: Request) {
     place(40);
     ecrire("Promos des circulaires concurrentes (source Flipp, à confirmer)", MARGE, 9.5, gras);
     tableau(
-      [{ titre: "PRODUIT", largeur: 215 }, { titre: "MON PRIX", largeur: 60, droite: true }, { titre: "PROMO", largeur: 120, droite: true }, { titre: "COMPARAISON", largeur: 65, droite: true }, { titre: "ÉCART", largeur: 55, droite: true }],
+      [{ titre: "PRODUIT", largeur: 165 }, { titre: "MON PRIX", largeur: 55, droite: true }, { titre: "PROMO", largeur: 110, droite: true }, { titre: "FIN", largeur: 55, droite: true }, { titre: "COMPARAISON", largeur: 75, droite: true }, { titre: "ÉCART", largeur: 55, droite: true }],
       enCours.map((p) => [
         [p.marque, p.produit, p.format].filter(Boolean).join(" · "),
         argent(Number(p.mon_prix)),
         { texte: `${p.banniere} ${argent(Number(p.prix))}`, logo: logoDe(p.banniere as string) },
-        p.verdict === "identique" ? "Identique" : "Par unité",
+        dateCourte(p.fin as string | null),
+        p.verdict === "identique" ? "Identique" : p.verdict === "equivalent" ? "Marque maison" : "Par unité",
         { texte: pct(Number(p.ecart_pct)), couleur: ROUGE },
       ]),
       30,
@@ -276,15 +286,17 @@ export async function GET(req: Request) {
   section("Prix relevés", `${releves.length} prix, classés par catégorie.`);
   const tries = [...releves].sort((a, b) => (a.categorie ?? "zz").localeCompare(b.categorie ?? "zz", "fr") || (a.produit ?? "").localeCompare(b.produit ?? "", "fr"));
   tableau(
-    [{ titre: "PRODUIT", largeur: 195 }, { titre: "CATÉGORIE", largeur: 105 }, { titre: "RÉGULIER", largeur: 55, droite: true }, { titre: "PROMO", largeur: 75, droite: true }, { titre: "PAR UNITÉ", largeur: 85, droite: true }],
+    [{ titre: "PRODUIT", largeur: 170 }, { titre: "CATÉGORIE", largeur: 75 }, { titre: "RÉGULIER", largeur: 50, droite: true }, { titre: "PROMO", largeur: 55, droite: true }, { titre: "MEMBRE", largeur: 45, droite: true }, { titre: "FIN PROMO", largeur: 55, droite: true }, { titre: "PAR UNITÉ", largeur: 65, droite: true }],
     tries.map((s) => {
       const unite = prixParUnite(prixEffectif(s), s.format);
       const promo = s.prix_promo === null ? "" : s.promo_quantite && s.promo_quantite > 1 ? `${s.promo_quantite} / ${argent(Number(s.prix_promo))}` : argent(Number(s.prix_promo));
       return [
-        nomProduit(s) + (s.prix_membre ? " (membre)" : ""),
+        nomProduit(s),
         s.categorie ?? "",
         argent(s.prix_regulier === null ? null : Number(s.prix_regulier)),
         promo,
+        s.prix_membre ? { texte: "Oui", couleur: ACCENT } : "",
+        dateCourte(s.date_fin),
         unite ? texteUnite(unite) : "",
       ];
     }),
