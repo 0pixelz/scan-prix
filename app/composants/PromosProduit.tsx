@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { prixEffectif } from "@/lib/comparaison";
-import { ecartPromo, lienOffre, pctLisible, type Offre } from "@/lib/promos";
+import { ecartPromo, imageOffre, lienOffre, pctLisible, type Offre } from "@/lib/promos";
 import type { Scan } from "@/lib/types";
 import { IChevron, PastilleBanniere, argent, dateLisible } from "./ui";
 
@@ -14,7 +14,8 @@ const DUREE = 6 * 3600 * 1000;
  * Sur la fiche d'un prix : les promos en cours dans les circulaires des autres bannières pour ce produit, avec
  * l'écart par rapport au prix relevé. Recherche Flipp (source non officielle) : à confirmer dans la circulaire.
  */
-export default function PromosProduit({ scan, banniere, codePostal, seuil, lecture, change }: {
+export default function PromosProduit({ scan, banniere, codePostal, seuil, lecture, change, voir }: {
+  voir?: (image: string) => void; // ouvre l'offre de la circulaire en grand, dans l'app
   scan: Scan;
   banniere: string | null;
   codePostal: string;
@@ -94,10 +95,14 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
       {erreur && <div className="muted">{erreur}</div>}
       {garde && !occupe && !offres.length && <div className="muted">Aucune promo comparable cette semaine.</div>}
       {!occupe && offres.map(({ o, e }, i) => {
-        const lien = lienOffre(o.lien);
+        // L'offre s'ouvre dans l'app (image de la circulaire) ; sans image, le lien mène au site des circulaires.
+        const image = voir ? imageOffre(o.image) : null;
+        const lien = image ? null : lienOffre(o.lien);
         const Ligne = lien ? "a" : "div";
         return (
-        <Ligne className="offre" key={i} {...(lien ? { href: lien, target: "_blank", rel: "noopener noreferrer", "aria-label": `Voir l'offre de ${o.banniere} dans la circulaire` } : {})}>
+        <Ligne className={`offre ${image ? "ouvrable" : ""}`} key={i}
+          {...(image ? { role: "button", onClick: () => voir!(image), "aria-label": `Voir l'offre de ${o.banniere} dans la circulaire` } : {})}
+          {...(lien ? { href: lien, target: "_blank", rel: "noopener noreferrer", "aria-label": `Voir l'offre de ${o.banniere} dans la circulaire` } : {})}>
           <PastilleBanniere banniere={o.banniere} doux />
           <div className="mid">
             <div className="t">{o.banniere} <span className={`pill ${o.verdict === "identique" ? "baisse" : "verif"}`}>{o.verdict === "identique" ? "Identique" : o.verdict === "proche" ? "Proche" : "À confirmer"}</span></div>
@@ -108,14 +113,14 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
             <b>{argent(o.prix)}</b>
             {e ? <span className={e.pct <= -seuil ? "hausse" : "muted"}>{pctLisible(e.pct)}</span> : <small>sans écart</small>}
           </div>
-          {lien && <IChevron />}
+          {(lien || image) && <IChevron />}
         </Ligne>
         );
       })}
       {garde && !occupe && offres.length > 0 && (
         <small className="source">
           <img src="/bannieres/reebee.webp" alt="reebee" />
-          <span>Circulaires de Flipp et reebee (même plateforme, source non officielle), à confirmer. Touche une offre pour l'ouvrir dans la circulaire. Écart par rapport à ton prix de {argent(prix)}.</span>
+          <span>Circulaires de Flipp et reebee (même plateforme, source non officielle), à confirmer. Touche une offre pour la voir telle qu'imprimée dans la circulaire. Écart par rapport à ton prix de {argent(prix)}.</span>
         </small>
       )}
     </div>

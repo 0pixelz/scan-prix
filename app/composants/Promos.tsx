@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import type { Reference } from "@/lib/types";
-import { ecartPromo as ecart, lienOffre, pctLisible as pct, type Offre } from "@/lib/promos";
+import { ecartPromo as ecart, imageOffre, lienOffre, pctLisible as pct, type Offre } from "@/lib/promos";
+import Visionneuse from "./Visionneuse";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
 import { IRecherche, PastilleBanniere, argent, dateLisible } from "./ui";
@@ -35,6 +36,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
   const [resultat, setResultat] = useState<Resultat | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState("");
+  const [offreVue, setOffreVue] = useState<string | null>(null); // offre de circulaire ouverte en grand
   const [seulement, setSeulement] = useState(false); // seulement les écarts au-dessus du seuil
   const cle = `scanprix.promos.${visiteId ?? "tout"}`;
 
@@ -119,6 +121,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
 
   return (
     <>
+      {offreVue && <Visionneuse src={offreVue} fermer={() => setOffreVue(null)} />}
       <div className="card">
         <h2>Promos en cours chez les concurrents</h2>
         <div className="muted">
@@ -171,8 +174,8 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
                 <div className="r"><b>{argent(p.prix)}</b><small>{p.source}</small></div>
               </div>
               {p.offres.map(({ o, e }, i) => (
-                <div key={i} className="tx" role={lienOffre(o.lien) ? "link" : undefined} style={{ cursor: lienOffre(o.lien) ? "pointer" : "default" }}
-                  onClick={() => { const l = lienOffre(o.lien); if (l) window.open(l, "_blank", "noopener,noreferrer"); }}>
+                <div key={i} className="tx" role={imageOffre(o.image) || lienOffre(o.lien) ? "button" : undefined} style={{ cursor: imageOffre(o.image) || lienOffre(o.lien) ? "pointer" : "default" }}
+                  onClick={() => { const img = imageOffre(o.image); const l = lienOffre(o.lien); if (img) setOffreVue(img); else if (l) window.open(l, "_blank", "noopener,noreferrer"); }}>
                   <PastilleBanniere banniere={o.banniere} doux />
                   <div className="mid">
                     <div className="t">{o.banniere}</div>

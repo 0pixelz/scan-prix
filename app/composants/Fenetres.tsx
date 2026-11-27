@@ -268,7 +268,6 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
     supprime(scan.id);
   }
 
-  if (lecteur) return <ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setF((v) => ({ ...v, cup: code })); setLecteur(false); }} />;
   // Photo du vrai produit : celle déjà trouvée, sinon cherchée par le code-barres
   const [imageP, setImageP] = useState<string | null>(scan.image_produit ?? null);
   const [produitAgrandi, setProduitAgrandi] = useState(false);
@@ -304,6 +303,9 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
     if (data) enregistre(data as Scan, true);
   }
 
+  const [offreVue, setOffreVue] = useState<string | null>(null);
+  if (lecteur) return <ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setF((v) => ({ ...v, cup: code })); setLecteur(false); }} />;
+  if (offreVue) return <Visionneuse src={offreVue} fermer={() => setOffreVue(null)} />;
   if (produitAgrandi && imageP) return <Visionneuse src={imageEnGrand(imageP)} fermer={() => setProduitAgrandi(false)} />;
   if (agrandie && photo) return <Visionneuse src={photo} fermer={() => setAgrandie(false)} />;
 
@@ -333,7 +335,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
             {recherchePhoto === "cours" ? "Recherche d'une photo…" : recherchePhoto === "rien" ? "Aucune photo trouvée. Réessayer" : "Chercher une photo du produit"}
           </button>
         )}
-        <PromosProduit scan={scan} banniere={banniere ?? null} codePostal={codePostal ?? ""} seuil={seuil ?? 5} lecture={lecture} change={promosChange} />
+        <PromosProduit scan={scan} banniere={banniere ?? null} codePostal={codePostal ?? ""} seuil={seuil ?? 5} lecture={lecture} change={promosChange} voir={setOffreVue} />
         {(unite || reference) && (
           <div className="resume">
             {unite && <div><span>Prix par unité</span><b>{texteUnite(unite)}</b></div>}

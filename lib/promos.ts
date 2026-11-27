@@ -9,6 +9,9 @@ export type Offre = {
 };
 
 /** Lien d'une offre, seulement s'il mène bien à la circulaire en ligne. */
+/** Image de l'offre telle qu'imprimée dans la circulaire, si elle vient bien du service de circulaires. */
+export const imageOffre = (image: string | null | undefined) => (image && /^https:\/\/[a-z0-9.-]+\.wishabi\.(net|com)\//.test(image) ? image : null);
+
 export const lienOffre = (lien: string | null | undefined) => (lien && /^https:\/\/flipp\.com\//.test(lien) ? lien : null);
 
 /** Écart entre la promo et mon prix : au prix affiché si le format est le même, sinon au prix par unité quand c'est possible. */
