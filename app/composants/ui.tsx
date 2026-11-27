@@ -1,16 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cupNormalise } from "@/lib/comparaison";
 import type { Reference, ScanAvecVisite } from "@/lib/types";
+import { logoBanniere } from "@/lib/bannieres";
 
 export const BANNIERES = ["IGA", "Walmart", "Costco", "Maxi", "Dollarama", "Provigo", "Metro", "Super C", "Pharmaprix"];
 
-const LOGOS = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro", "superc", "pharmaprix"];
-
-/** Adresse du logo d'une bannière (fichiers fournis dans public/bannieres), ou null si on n'en a pas. */
-export function logoBanniere(banniere: string | null | undefined): string | null {
-  const cle = (banniere ?? "").toLowerCase().normalize("NFD").replace(/[^a-z]/g, "");
-  return LOGOS.includes(cle) ? `/bannieres/${cle}.webp` : null;
-}
+export { logoBanniere };
 
 /** Pastille d'une bannière : son logo s'il est connu, sinon son initiale. */
 export function PastilleBanniere({ banniere, doux }: { banniere: string | null | undefined; doux?: boolean }) {

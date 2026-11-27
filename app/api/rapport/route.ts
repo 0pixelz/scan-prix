@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import { logoBanniere } from "@/lib/bannieres";
 import { alertes, comparer, cupNormalise, grouper, normaliser, prixEffectif, variations } from "@/lib/comparaison";
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { supabaseServer } from "@/lib/supabase";
@@ -23,7 +24,7 @@ const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")}
 const dateLongue = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("fr-CA", { day: "numeric", month: "long", year: "numeric" });
 
 type Colonne = { titre: string; largeur: number; droite?: boolean };
-type Cellule = string | { texte: string; couleur: ReturnType<typeof rgb> };
+type Cellule = string | { texte: string; couleur?: ReturnType<typeof rgb>; logo?: PDFImage | null };
 
 /** Rapport d'une visite en PDF : résumé, changements de prix, alertes et liste des prix relevés. */
 export async function GET(req: Request) {
@@ -80,6 +81,31 @@ export async function GET(req: Request) {
   const gras = await pdf.embedFont(StandardFonts.HelveticaBold);
   let page: PDFPage = pdf.addPage([L, H]);
   let y = H - MARGE;
+  // Logos des bannières (fichiers du site), convertis en PNG pour le PDF. Un logo introuvable est simplement omis.
+  const logos = new Map<string, PDFImage | null>();
+  const origine = new URL(req.url).origin;
+  const sharp = await import("sharp").then((m) => m.default).catch(() => null);
+  const chargerLogos = async (bannieres: (string | null | undefined)[]) => {
+    await Promise.all([...new Set(bannieres.map((b) => logoBanniere(b)).filter((c): c is string => c !== null))].map(async (chemin) => {
+      if (logos.has(chemin)) return;
+      try {
+        if (!sharp) throw new Error("conversion indisponible");
+        const rep = await fetch(`${origine}${chemin}`, { signal: AbortSignal.timeout(6000) });
+        if (!rep.ok) throw new Error("logo absent");
+        const png = await sharp(Buffer.from(await rep.arrayBuffer())).resize({ height: 96, withoutEnlargement: true }).png().toBuffer();
+        logos.set(chemin, await pdf.embedPng(png));
+      } catch {
+        logos.set(chemin, null);
+      }
+    }));
+  };
+  const logoDe = (banniere: string | null | undefined) => logos.get(logoBanniere(banniere) ?? "") ?? null;
+  /** Dessine un logo de la hauteur voulue (largeur plafonnée) et renvoie la largeur occupée. */
+  const dessinerLogo = (image: PDFImage, x: number, bas: number, hauteur: number, largeurMax: number) => {
+    const e = Math.min(hauteur / image.height, largeurMax / image.width);
+    page.drawImage(image, { x, y: bas + (hauteur - image.height * e) / 2, width: image.width * e, height: image.height * e });
+    return image.width * e;
+  };
   const place = (hauteur: number) => {
     if (y - hauteur < MARGE + 14) {
       page = pdf.addPage([L, H]);
@@ -108,9 +134,13 @@ export async function GET(req: Request) {
       let x = MARGE;
       colonnes.forEach((c, i) => {
         const cellule = cellules[i] ?? "";
-        const texte = couper(typeof cellule === "string" ? cellule : cellule.texte, police, taille, c.largeur - 6);
-        const couleur = typeof cellule === "string" ? couleurDefaut : cellule.couleur;
-        page.drawText(texte, { x: c.droite ? x + c.largeur - police.widthOfTextAtSize(texte, taille) : x, y, size: taille, font: police, color: couleur });
+        const logo = typeof cellule === "string" ? null : cellule.logo ?? null;
+        const lLogo = logo ? Math.min(9 / logo.height, 24 / logo.width) * logo.width + 4 : 0;
+        const texte = couper(typeof cellule === "string" ? cellule : cellule.texte, police, taille, c.largeur - 6 - lLogo);
+        const couleur = typeof cellule === "string" ? couleurDefaut : cellule.couleur ?? couleurDefaut;
+        const xTexte = c.droite ? x + c.largeur - police.widthOfTextAtSize(texte, taille) : x + lLogo;
+        if (logo) dessinerLogo(logo, xTexte - lLogo, y - 1.5, 9, 24);
+        page.drawText(texte, { x: xTexte, y, size: taille, font: police, color: couleur });
         x += c.largeur;
       });
     };
@@ -144,7 +174,10 @@ export async function GET(req: Request) {
   y -= 8;
   ecrire("RAPPORT DE VISITE", MARGE, 8.5, gras, ACCENT);
   y -= 24;
-  ecrire([visite.banniere, visite.magasin].filter(Boolean).join(" · "), MARGE, 20, gras);
+  await chargerLogos([visite.banniere, ...vsAutres.map((a) => a.autre.banniere)]);
+  const logoVisite = logoDe(visite.banniere);
+  const decalage = logoVisite ? dessinerLogo(logoVisite, MARGE, y - 3, 22, 70) + 8 : 0;
+  ecrire([visite.banniere, visite.magasin].filter(Boolean).join(" · "), MARGE + decalage, 20, gras);
   y -= 16;
   ecrire(dateLongue(visite.date_visite), MARGE, 10.5, normal, GRIS);
   const auteur = [reglages.filigrane.nom, reglages.filigrane.poste].filter(Boolean).join(", ");
@@ -213,7 +246,7 @@ export async function GET(req: Request) {
     ecrire("Par rapport aux autres bannières (prix le plus bas relevé ailleurs)", MARGE, 9.5, gras);
     tableau(
       [{ titre: "PRODUIT", largeur: 250 }, { titre: visite.banniere.toUpperCase(), largeur: 65, droite: true }, { titre: "AILLEURS", largeur: 130, droite: true }, { titre: "ÉCART", largeur: 70, droite: true }],
-      vsAutres.map((a) => [nomProduit(a.groupe), argent(a.moi.prix), `${a.autre.banniere} ${argent(a.autre.prix)}`, { texte: pct(a.ecart), couleur: a.ecart > 0 ? ROUGE : VERT }]),
+      vsAutres.map((a) => [nomProduit(a.groupe), argent(a.moi.prix), { texte: `${a.autre.banniere} ${argent(a.autre.prix)}`, logo: logoDe(a.autre.banniere) }, { texte: pct(a.ecart), couleur: a.ecart > 0 ? ROUGE : VERT }]),
       30,
     );
   }
@@ -222,6 +255,7 @@ export async function GET(req: Request) {
   const { data: promosCirc } = await supabase.from("promos_circulaires").select("*").eq("visite_id", visiteId).not("ecart_pct", "is", null).lte("ecart_pct", -reglages.seuil).order("ecart_pct", { ascending: true }).limit(200);
   const enCours = (promosCirc ?? []).filter((p) => !p.fin || Date.parse(p.fin) > Date.now());
   if (enCours.length) {
+    await chargerLogos(enCours.map((p) => p.banniere as string));
     y -= 16;
     place(40);
     ecrire("Promos des circulaires concurrentes (source Flipp, à confirmer)", MARGE, 9.5, gras);
@@ -230,7 +264,7 @@ export async function GET(req: Request) {
       enCours.map((p) => [
         [p.marque, p.produit, p.format].filter(Boolean).join(" · "),
         argent(Number(p.mon_prix)),
-        `${p.banniere} ${argent(Number(p.prix))}`,
+        { texte: `${p.banniere} ${argent(Number(p.prix))}`, logo: logoDe(p.banniere as string) },
         p.verdict === "identique" ? "Identique" : "Par unité",
         { texte: pct(Number(p.ecart_pct)), couleur: ROUGE },
       ]),
