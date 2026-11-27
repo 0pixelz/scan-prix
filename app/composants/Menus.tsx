@@ -5,11 +5,11 @@ import { supabaseBrowser } from "@/lib/supabase";
 import { grouper, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import type { ListeNom, ProduitListe, Visite } from "@/lib/types";
 import IconeProduit from "./IconeProduit";
-import { Fantomes } from "./Gestes";
-import { IExport, IJournal, IListe, IPlus, IRecherche, PastilleBanniere, argent, chargerTout, dateLisible } from "./ui";
+import { Fantomes, Glissable } from "./Gestes";
+import { IExport, IJournal, IListe, IPlus, IPoubelle, IRecherche, PastilleBanniere, argent, chargerTout, dateLisible } from "./ui";
 
 /** Choix de la visite en cours, ouvert depuis l'en-tête de n'importe quel onglet. */
-export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, fermer, lecture, auteur }: {
+export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, fermer, lecture, auteur, supprimer }: {
   visites: Visite[];
   courante: Visite | null;
   choisir: (v: Visite) => void;
@@ -18,6 +18,7 @@ export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, ferme
   fermer: () => void;
   lecture: boolean;
   auteur: (v: Visite) => string;
+  supprimer: (v: Visite) => void;
 }) {
   return (
     <div className="sheet" onClick={(e) => e.target === e.currentTarget && fermer()}>
@@ -30,13 +31,16 @@ export function ChoixVisite({ visites, courante, choisir, nouvelle, gerer, ferme
         <div className="defile">
           {!visites.length && <div className="empty"><div>Aucune visite.</div></div>}
           {visites.map((v) => (
-            <div key={v.id} className="tx" role="button" onClick={() => choisir(v)}>
+            <Glissable key={v.id} gauche={lecture ? undefined : { libelle: "Supprimer", action: () => supprimer(v) }}>
+            <div className="tx" role="button" onClick={() => choisir(v)}>
               <PastilleBanniere banniere={v.banniere} doux={v.id !== courante?.id} />
               <div className="mid">
                 <div className="t">{v.banniere}{v.magasin ? ` · ${v.magasin}` : ""}</div>
                 <div className="s">{dateLisible(v.date_visite)}{v.id === courante?.id ? " · en cours" : ""}{auteur(v) ? ` · ${auteur(v)}` : ""}</div>
               </div>
+              {!lecture && <button type="button" className="ghost icone" aria-label={`Supprimer la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); supprimer(v); }}><IPoubelle /></button>}
             </div>
+            </Glissable>
           ))}
         </div>
         <div className="actions">

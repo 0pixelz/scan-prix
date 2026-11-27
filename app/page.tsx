@@ -22,7 +22,7 @@ import Liste from "./composants/Liste";
 import Rafale from "./composants/Rafale";
 import { Edition, Historique, NouvelleVisite } from "./composants/Fenetres";
 import {
-  IAssistant, ICamera, IComparer, ICrayon, IEffacer, IPlusMenu, IReglages, IEtiquette, IExport, IPartage, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
+  IAssistant, ICamera, IComparer, ICrayon, IEffacer, IPlusMenu, IReglages, IEtiquette, IExport, IPartage, IPoubelle, IChevron, IHorsLigne, IJournal, IListe, IMagasin, IPhotos, IPlus, IRecherche,
   PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
   logoBanniere,
 } from "./composants/ui";
@@ -531,6 +531,22 @@ function App({ refuse }: { refuse: () => void }) {
   const enDouble = useMemo(() => doublons(scans), [scans]);
 
   // Gestes sur une ligne : glisser à gauche pour supprimer (récupérable), à droite pour marquer vérifié
+  // Suppression d'une visite (glissement ou poubelle) : elle part à la corbeille avec ses prix, et peut être annulée.
+  function apresSuppressionVisite(id: string) {
+    const reste = visites.filter((x) => x.id !== id);
+    setVisites(reste);
+    if (visite?.id === id) {
+      setVisite(reste[0] ?? null);
+      if (!reste.length) setNouvelle(true);
+    }
+    setVersion((n) => n + 1);
+    proposerAnnulation(id, "Visite supprimée.");
+  }
+  async function supprimerVisite(v: Visite) {
+    const { data, error } = await sb.from("visites").delete().eq("id", v.id).select("id");
+    if (error || !data?.length) return setErreur(error?.message ?? "Suppression refusée.");
+    apresSuppressionVisite(v.id);
+  }
   async function supprimerScan(s: Scan) {
     const { data, error } = await sb.from("scans").delete().eq("id", s.id).select("id");
     if (error || !data?.length) return setErreur(error?.message ?? "Accès en lecture seule : suppression refusée.");
@@ -886,13 +902,15 @@ function App({ refuse }: { refuse: () => void }) {
               </div>
             )}
             {visites.map((v) => (
-              <div key={v.id} className="tx" role="button" onClick={() => { setVisite(v); setOnglet("scan"); }}>
+              <Glissable key={v.id} gauche={lecture ? undefined : { libelle: "Supprimer", action: () => supprimerVisite(v) }}>
+              <div className="tx" role="button" onClick={() => { setVisite(v); setOnglet("scan"); }}>
                 <PastilleBanniere banniere={v.banniere} doux={v.id !== visite?.id} />
                 <div className="mid">
                   <div className="t">{v.banniere}{v.magasin ? ` · ${v.magasin}` : ""}</div>
                   <div className="s">{dateLisible(v.date_visite)}{v.id === visite?.id ? " · en cours" : ""}{auteur(v) ? ` · ${auteur(v)}` : ""}</div>
                 </div>
                 {!lecture && <button className="ghost icone" aria-label={`Modifier la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); setModifVisite(v); }}><ICrayon /></button>}
+                {!lecture && <button className="ghost icone" aria-label={`Supprimer la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); supprimerVisite(v); }}><IPoubelle /></button>}
                 <button className="small" disabled={rapportEnCours} aria-label={`Rapport de la visite ${v.banniere}`} onClick={(e) => { e.stopPropagation(); rapport(v); }}>
                   PDF
                 </button>
@@ -900,6 +918,7 @@ function App({ refuse }: { refuse: () => void }) {
                   Excel
                 </button>
               </div>
+              </Glissable>
             ))}
           </div>
         </Principal>
@@ -948,7 +967,8 @@ function App({ refuse }: { refuse: () => void }) {
         <ChoixVisite visites={visites} courante={visite} lecture={lecture} auteur={auteur} fermer={() => setMenu(null)}
           choisir={(v) => { setVisite(v); setMenu(null); }}
           nouvelle={() => { setMenu(null); setNouvelle(true); }}
-          gerer={() => { setMenu(null); setOnglet("visites"); }} />
+          gerer={() => { setMenu(null); setOnglet("visites"); }}
+          supprimer={supprimerVisite} />
       )}
       {menu === "export" && (
         <MenuExport visite={visite} vide={!scans.length} fermer={() => setMenu(null)}
@@ -999,17 +1019,7 @@ function App({ refuse }: { refuse: () => void }) {
             if (visite?.id === v.id) setVisite(v);
             setModifVisite(null);
           }}
-          supprimee={(id) => {
-            const reste = visites.filter((x) => x.id !== id);
-            setVisites(reste);
-            if (visite?.id === id) {
-              setVisite(reste[0] ?? null);
-              if (!reste.length) setNouvelle(true);
-            }
-            setModifVisite(null);
-            setVersion((n) => n + 1);
-            proposerAnnulation(id, "Visite supprimée.");
-          }}
+          supprimee={(id) => { setModifVisite(null); apresSuppressionVisite(id); }}
         />
       )}
 
