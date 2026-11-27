@@ -235,7 +235,8 @@ export async function GET(req: Request) {
     { header: "Fin", key: "date_fin", width: 12 },
     { header: "CUP", key: "cup", width: 16 },
     { header: "Code article", key: "code_article", width: 14 },
-    { header: "Prix unitaire affiché", key: "prix_unitaire", width: 20 },
+    { header: "Prix unitaire affiché (régulier)", key: "prix_unitaire", width: 22 },
+    { header: "Prix unitaire affiché (promo)", key: "prix_unitaire_promo", width: 22 },
     { header: "Confiance", key: "confiance", width: 11 },
     { header: "Notes", key: "notes", width: 24 },
     { header: "Photo prise le", key: "created_at", width: 18 },
@@ -275,6 +276,7 @@ export async function GET(req: Request) {
       cup: l.cup, // texte : garde les zéros de tête
       code_article: l.code_article,
       prix_unitaire: l.prix_unitaire,
+      prix_unitaire_promo: l.prix_unitaire_promo,
       confiance: l.confiance,
       notes: l.notes,
       created_at: new Date(l.photo_prise_le ?? l.created_at).toLocaleString("fr-CA", { timeZone: "America/Toronto", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }),

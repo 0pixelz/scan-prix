@@ -26,7 +26,8 @@ export type Scan = {
   date_fin: string | null;
   cup: string | null;
   code_article: string | null;
-  prix_unitaire: string | null;
+  prix_unitaire: string | null; // prix par unité imprimé à côté du prix régulier
+  prix_unitaire_promo?: string | null; // prix par unité imprimé à côté du prix en rabais
   categorie: string | null;
   cle_produit: string | null;
   icone: string | null;

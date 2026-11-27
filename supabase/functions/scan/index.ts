@@ -35,7 +35,8 @@ const REGLES = `Règles :
 - Dates au format AAAA-MM-JJ. Si l'année n'est pas imprimée, utilise celle de la date du jour fournie.
 - cup : uniquement les chiffres du code-barres (CUP/UPC), souvent précédés de « CUP » ou « UPC ».
 - code_article : le numéro d'article interne du magasin. Chez Metro et Super C, c'est le code SAP : un nombre seul, le plus souvent de 8 chiffres, imprimé près du code-barres ou juste en dessous (ex. 15224811). Ne prends jamais à sa place un code avec des tirets (ex. 020721-00011-0803), une date, un numéro d'emplacement (« Emp 7 ») ni un code de planogramme (ex. C18120). Si aucun numéro ne convient, null.
-- prix_unitaire : le prix par unité de mesure tel qu'affiché (ex. « 1,25 $ / 100 g »).
+- prix_unitaire : le prix par unité de mesure imprimé à côté du prix RÉGULIER, tel qu'affiché (ex. « 1,97 $ / 100 g »).
+- prix_unitaire_promo : le prix par unité de mesure imprimé à côté du prix EN RABAIS (ou du prix membre), tel qu'affiché (ex. « 1,69 $ / 100 g »). Quand la carte montre deux prix, chacun a le sien juste en dessous : ne les inverse pas. Sans prix en rabais, null.
 - confiance : « haute », « moyenne » ou « basse » selon la lisibilité.
 - categorie : une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre.
 - icone : le type de produit, une seule valeur parmi : pain, viennoiserie, craquelin, biscuit, cereales, pates_riz, farine_sucre, lait, yogourt, fromage, beurre, oeufs, viande, volaille, charcuterie, poisson, fruits_de_mer, fruits, legumes, salade, conserve, soupe, sauce_condiment, huile, epices, tartinade, cafe, the, jus, boisson_gazeuse, eau, biere, vin, croustilles, noix, bonbon, chocolat, dessert, creme_glacee, surgele, pizza, repas_prepare, bebe, animaux, nettoyage, lessive, papier, hygiene, sante, autre.
@@ -45,7 +46,7 @@ const FIN_CLAUDE = `Réponds toujours en appelant l'outil enregistrer_cartes, un
 Si rien n'est lisible, appelle-le avec une liste vide.`;
 
 const FIN_SECOURS = `Réponds uniquement avec un objet JSON de la forme {"cartes": [ ... ]}, une entrée par carte lue, avec exactement ces champs :
-produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, prix_membre, points, points_details, cup, code_article, prix_unitaire, categorie, icone, cle_produit, confiance.
+produit, marque, format, prix_regulier, prix_promo, promo_quantite, promo_texte, date_debut, date_fin, prix_membre, points, points_details, cup, code_article, prix_unitaire, prix_unitaire_promo, categorie, icone, cle_produit, confiance.
 Si rien n'est lisible, réponds {"cartes": []}.`;
 
 const texte = { type: ["string", "null"] };
@@ -66,7 +67,7 @@ const OUTIL = {
             promo_quantite: { type: ["integer", "null"] },
             promo_texte: texte, date_debut: texte, date_fin: texte,
             prix_membre: { type: ["boolean", "null"] }, points: { type: ["integer", "null"] }, points_details: texte,
-            cup: texte, code_article: texte, prix_unitaire: texte,
+            cup: texte, code_article: texte, prix_unitaire: texte, prix_unitaire_promo: texte,
             categorie: texte, icone: texte, cle_produit: texte,
             confiance: { type: "string", enum: ["haute", "moyenne", "basse"] },
           },
@@ -221,7 +222,7 @@ Deno.serve(async (req) => {
       promo_texte: str(c.promo_texte), date_debut: date(c.date_debut), date_fin: date(c.date_fin),
       prix_membre: c.prix_membre === true, points: typeof c.points === "number" ? Math.trunc(c.points) : null, points_details: str(c.points_details),
       cup: str(c.cup)?.replace(/\D/g, "") || null,
-      code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire),
+      code_article: str(c.code_article), prix_unitaire: str(c.prix_unitaire), prix_unitaire_promo: str(c.prix_unitaire_promo),
       categorie: str(c.categorie), icone: str(c.icone)?.toLowerCase() ?? null, cle_produit: str(c.cle_produit)?.toLowerCase() ?? null,
       confiance: ["haute", "moyenne", "basse"].includes(String(c.confiance)) ? String(c.confiance) : "moyenne", photo_path: photoPath, photo_prise_le: prise, source: circulaire ? "circulaire" : null,
     }));

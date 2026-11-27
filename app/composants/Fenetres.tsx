@@ -194,7 +194,7 @@ export function ScannerCode({ fermer, lu }: { fermer: () => void; lu: (code: str
   );
 }
 
-const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "points", "points_details", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "notes"];
+const CHAMPS_EDITION = ["produit", "marque", "format", "categorie", "icone", "prix_regulier", "prix_promo", "promo_quantite", "promo_texte", "points", "points_details", "date_debut", "date_fin", "cup", "code_article", "prix_unitaire", "prix_unitaire_promo", "notes"];
 
 export function Edition({ scan, fermer, enregistre, supprime, historique, lecture, codePostal, banniere, seuil, promosChange }: {
   scan: Scan;
@@ -253,7 +253,7 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
       promo_quantite: qte === null ? null : Math.trunc(qte),
       promo_texte: t("promo_texte"), date_debut: t("date_debut"), date_fin: t("date_fin"),
       prix_membre: membre, points: pts === null ? null : Math.trunc(pts), points_details: t("points_details"),
-      cup: t("cup")?.replace(/\D/g, "") || null, code_article: t("code_article"), prix_unitaire: t("prix_unitaire"), notes: t("notes"),
+      cup: t("cup")?.replace(/\D/g, "") || null, code_article: t("code_article"), prix_unitaire: t("prix_unitaire"), prix_unitaire_promo: t("prix_unitaire_promo"), notes: t("notes"),
       confiance: "haute", // vérifié à la main
     };
     const { data, error } = await sb.from("scans").update(maj).eq("id", scan.id).select().single();
@@ -384,8 +384,9 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
         </select>
         <div className="grid2">
           {champ("prix_regulier", "Prix régulier ($)", { inputMode: "decimal" })}
-          {champ("prix_unitaire", "Prix unitaire affiché")}
+          {champ("prix_unitaire", "Prix unitaire du régulier")}
           {champ("prix_promo", "Prix promo ($)", { inputMode: "decimal" })}
+          {champ("prix_unitaire_promo", "Prix unitaire du promo")}
           {champ("promo_quantite", "Quantité promo", { inputMode: "numeric" })}
         </div>
         {champ("promo_texte", "Offre")}

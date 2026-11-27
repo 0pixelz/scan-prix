@@ -708,3 +708,6 @@ alter table public.promos_circulaires add column if not exists lien text;
 
 -- Emplacement de l'offre dans la circulaire : première page, dernière page ou intérieur.
 alter table public.promos_circulaires add column if not exists emplacement text;
+
+-- Prix par unité de mesure imprimé à côté du prix en rabais, distinct de celui du prix régulier.
+alter table public.scans add column if not exists prix_unitaire_promo text;
