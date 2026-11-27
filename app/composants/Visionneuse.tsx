@@ -7,7 +7,7 @@ const MAX = 6;
 /**
  * Photo en plein écran : pincer pour zoomer, glisser pour se déplacer, double appui pour zoomer ou revenir.
  */
-export default function Visionneuse({ src, fermer }: { src: string; fermer: () => void }) {
+export default function Visionneuse({ src, fermer, lien }: { src: string; fermer: () => void; lien?: { libelle: string; href: string } | null }) {
   const [vue, setVue] = useState({ e: 1, x: 0, y: 0 }); // échelle et décalage par rapport au centre
   const zone = useRef<HTMLDivElement>(null);
   const doigts = useRef(new Map<number, { x: number; y: number }>());
@@ -99,6 +99,7 @@ export default function Visionneuse({ src, fermer }: { src: string; fermer: () =
         <span>{vue.e > 1.05 ? `Zoom ${vue.e.toFixed(1).replace(".", ",")} ×` : "Pince pour zoomer, ou touche deux fois"}</span>
         <button onClick={fermer}>Fermer</button>
       </div>
+      {lien && <a className="vlien" href={lien.href} target="_blank" rel="noopener noreferrer">{lien.libelle}</a>}
     </div>
   );
 }

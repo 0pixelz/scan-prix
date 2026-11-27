@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { prixEffectif } from "@/lib/comparaison";
-import { ecartPromo, imageOffre, lienOffre, pctLisible, type Offre } from "@/lib/promos";
+import { ecartPromo, imageOffre, lienSite, pctLisible, type Offre } from "@/lib/promos";
 import type { Scan } from "@/lib/types";
 import { IChevron, PastilleBanniere, argent, dateLisible } from "./ui";
 
@@ -15,7 +15,7 @@ const DUREE = 6 * 3600 * 1000;
  * l'écart par rapport au prix relevé. Recherche Flipp (source non officielle) : à confirmer dans la circulaire.
  */
 export default function PromosProduit({ scan, banniere, codePostal, seuil, lecture, change, voir }: {
-  voir?: (image: string) => void; // ouvre l'offre de la circulaire en grand, dans l'app
+  voir?: (image: string, lien: { libelle: string; href: string }) => void; // ouvre l'offre de la circulaire en grand, dans l'app
   scan: Scan;
   banniere: string | null;
   codePostal: string;
@@ -55,7 +55,7 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
             visite_id: scan.visite_id, produit: scan.produit, marque: scan.marque, format: scan.format, cup: scan.cup,
             mon_prix: prix, source_prix: `Relevé ${banniere ?? ""}`.trim(), banniere: o.banniere, offre: o.nom, prix: o.prix, prix_offre: o.prixOffre,
             quantite: o.quantite, format_offre: o.format, verdict: o.verdict, ecart_pct: e ? Math.round(e.pct * 10) / 10 : null,
-            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienOffre(o.lien),
+            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienSite(o.banniere, scan).href,
           };
         });
         if (!e1 && lignes.length) await sb.from("promos_circulaires").insert(lignes);
@@ -95,14 +95,16 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
       {erreur && <div className="muted">{erreur}</div>}
       {garde && !occupe && !offres.length && <div className="muted">Aucune promo comparable cette semaine.</div>}
       {!occupe && offres.map(({ o, e }, i) => {
-        // L'offre s'ouvre dans l'app (image de la circulaire) ; sans image, le lien mène au site des circulaires.
+        // L'offre s'ouvre dans l'app (image de la circulaire, avec un bouton vers le site du concurrent) ;
+        // sans image, elle mène directement au produit sur le site du concurrent.
+        const site = lienSite(o.banniere, scan);
         const image = voir ? imageOffre(o.image) : null;
-        const lien = image ? null : lienOffre(o.lien);
+        const lien = image ? null : site.href;
         const Ligne = lien ? "a" : "div";
         return (
         <Ligne className={`offre ${image ? "ouvrable" : ""}`} key={i}
-          {...(image ? { role: "button", onClick: () => voir!(image), "aria-label": `Voir l'offre de ${o.banniere} dans la circulaire` } : {})}
-          {...(lien ? { href: lien, target: "_blank", rel: "noopener noreferrer", "aria-label": `Voir l'offre de ${o.banniere} dans la circulaire` } : {})}>
+          {...(image ? { role: "button", onClick: () => voir!(image, site), "aria-label": `Voir l'offre de ${o.banniere}` } : {})}
+          {...(lien ? { href: lien, target: "_blank", rel: "noopener noreferrer", "aria-label": site.libelle } : {})}>
           <PastilleBanniere banniere={o.banniere} doux />
           <div className="mid">
             <div className="t">{o.banniere} <span className={`pill ${o.verdict === "identique" ? "baisse" : "verif"}`}>{o.verdict === "identique" ? "Identique" : o.verdict === "proche" ? "Proche" : "À confirmer"}</span></div>
@@ -120,7 +122,7 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
       {garde && !occupe && offres.length > 0 && (
         <small className="source">
           <img src="/bannieres/reebee.webp" alt="reebee" />
-          <span>Circulaires de Flipp et reebee (même plateforme, source non officielle), à confirmer. Touche une offre pour la voir telle qu'imprimée dans la circulaire. Écart par rapport à ton prix de {argent(prix)}.</span>
+          <span>Circulaires de Flipp et reebee (même plateforme, source non officielle), à confirmer. Touche une offre pour voir le spécial de la circulaire et l'ouvrir sur le site du concurrent. Écart par rapport à ton prix de {argent(prix)}.</span>
         </small>
       )}
     </div>

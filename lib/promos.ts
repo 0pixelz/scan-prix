@@ -31,3 +31,28 @@ export function clePromo(p: { cup?: string | null; produit?: string | null; marq
 }
 
 export const pctLisible = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %`;
+
+const sansAccent = (t: string) => t.toLowerCase().normalize("NFD").replace(/[^a-z]/g, "");
+
+// Recherche d'un produit sur le site de la bannière (adresses de recherche publiques de chaque site).
+const SITES: Record<string, (q: string) => string> = {
+  maxi: (q) => `https://www.maxi.ca/fr/search?search-bar=${q}`,
+  provigo: (q) => `https://www.provigo.ca/fr/search?search-bar=${q}`,
+  metro: (q) => `https://www.metro.ca/recherche?filter=${q}`,
+  superc: (q) => `https://www.superc.ca/recherche?filter=${q}`,
+  iga: (q) => `https://www.iga.net/fr/search?k=${q}`,
+  walmart: (q) => `https://www.walmart.ca/fr/search?q=${q}`,
+  costco: (q) => `https://www.costco.ca/CatalogSearch?dept=All&langId=-25&keyword=${q}`,
+};
+
+/**
+ * Lien vers le produit sur le site du concurrent : la recherche de son site avec la marque et le nom du produit.
+ * Pour une bannière sans site connu ici : une recherche web du produit chez cette bannière.
+ */
+export function lienSite(banniere: string, produit: { marque?: string | null; produit?: string | null }): { libelle: string; href: string } {
+  const q = encodeURIComponent([produit.marque, produit.produit].filter(Boolean).join(" ").trim());
+  const site = SITES[sansAccent(banniere)];
+  return site
+    ? { libelle: `Voir sur le site de ${banniere}`, href: site(q) }
+    : { libelle: `Chercher chez ${banniere} sur le web`, href: `https://www.google.com/search?q=${encodeURIComponent(banniere)}+${q}` };
+}

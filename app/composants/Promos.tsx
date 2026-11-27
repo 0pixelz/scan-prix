@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase";
 import { cupNormalise, normaliser, prixEffectif, type Groupe } from "@/lib/comparaison";
 import type { Reference } from "@/lib/types";
-import { ecartPromo as ecart, imageOffre, lienOffre, pctLisible as pct, type Offre } from "@/lib/promos";
+import { ecartPromo as ecart, imageOffre, lienSite, pctLisible as pct, type Offre } from "@/lib/promos";
 import Visionneuse from "./Visionneuse";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
@@ -36,7 +36,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
   const [resultat, setResultat] = useState<Resultat | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState("");
-  const [offreVue, setOffreVue] = useState<string | null>(null); // offre de circulaire ouverte en grand
+  const [offreVue, setOffreVue] = useState<{ image: string; lien: { libelle: string; href: string } } | null>(null); // offre de circulaire ouverte en grand
   const [seulement, setSeulement] = useState(false); // seulement les écarts au-dessus du seuil
   const cle = `scanprix.promos.${visiteId ?? "tout"}`;
 
@@ -91,7 +91,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
             visite_id: visiteId, produit: p.groupe.nom, marque: p.groupe.marque, format: p.groupe.format, cup: p.groupe.cup,
             mon_prix: p.prix, source_prix: p.source, banniere: o.banniere, offre: o.nom, prix: o.prix, prix_offre: o.prixOffre,
             quantite: o.quantite, format_offre: o.format, verdict: o.verdict, ecart_pct: e ? Math.round(e.pct * 10) / 10 : null,
-            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienOffre(o.lien),
+            par_unite: e?.parUnite ?? null, fin: o.fin, lien: lienSite(o.banniere, { marque: p.groupe.marque, produit: p.groupe.nom }).href,
           };
         }));
         const anciennes = sb.from("promos_circulaires").delete();
@@ -121,7 +121,7 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
 
   return (
     <>
-      {offreVue && <Visionneuse src={offreVue} fermer={() => setOffreVue(null)} />}
+      {offreVue && <Visionneuse src={offreVue.image} lien={offreVue.lien} fermer={() => setOffreVue(null)} />}
       <div className="card">
         <h2>Promos en cours chez les concurrents</h2>
         <div className="muted">
@@ -174,8 +174,13 @@ export default function Promos({ enregistre, groupes, refs, visiteId, seuil, cod
                 <div className="r"><b>{argent(p.prix)}</b><small>{p.source}</small></div>
               </div>
               {p.offres.map(({ o, e }, i) => (
-                <div key={i} className="tx" role={imageOffre(o.image) || lienOffre(o.lien) ? "button" : undefined} style={{ cursor: imageOffre(o.image) || lienOffre(o.lien) ? "pointer" : "default" }}
-                  onClick={() => { const img = imageOffre(o.image); const l = lienOffre(o.lien); if (img) setOffreVue(img); else if (l) window.open(l, "_blank", "noopener,noreferrer"); }}>
+                <div key={i} className="tx" role="button" style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    const site = lienSite(o.banniere, { marque: p.groupe.marque, produit: p.groupe.nom });
+                    const img = imageOffre(o.image);
+                    if (img) setOffreVue({ image: img, lien: site });
+                    else window.open(site.href, "_blank", "noopener,noreferrer");
+                  }}>
                   <PastilleBanniere banniere={o.banniere} doux />
                   <div className="mid">
                     <div className="t">{o.banniere}</div>
