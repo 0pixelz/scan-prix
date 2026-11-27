@@ -55,6 +55,10 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
           setAutre(!BANNIERES.includes(proche.banniere));
           setMagasin(proche.magasin ?? "");
         }
+        // Dès l'ouverture : les magasins proches de la bannière déjà choisie (reconnue ou par défaut), sans avoir à
+        // la toucher. Un magasin reconnu qui a déjà son nom le garde.
+        const choisie = !touche.current ? proche?.banniere ?? banniereRef.current : "";
+        if (choisie && !(proche?.magasin ?? "").trim()) proposerMagasinsRef.current?.(choisie, ici);
       },
       () => { if (!annule) setGps("absent"); },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
@@ -94,13 +98,13 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
       { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 },
     ));
   };
-  async function proposerMagasins(b: string) {
+  async function proposerMagasins(b: string, connue?: { latitude: number; longitude: number }) {
     setProches([]);
     const n = ++demande.current;
     // Le magasin affiché appartenait à l'ancienne bannière : on le retire tout de suite, sauf s'il a été tapé à la main.
     const remplacer = !tape.current;
     if (remplacer) setMagasin("");
-    const ici = await ou();
+    const ici = connue ?? await ou();
     if (n !== demande.current || !ici) return;
     const liste = await magasinsProches(b, ici).catch(() => []);
     if (n !== demande.current) return;
@@ -110,6 +114,12 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
       setMagasin((actuel) => (actuel.trim() ? actuel : liste[0].nom));
     }
   }
+
+  // Accès à la version courante depuis la lecture de position, lancée une seule fois à l'ouverture.
+  const proposerMagasinsRef = useRef<typeof proposerMagasins | null>(null);
+  proposerMagasinsRef.current = proposerMagasins;
+  const banniereRef = useRef(banniere);
+  banniereRef.current = banniere;
 
   // Une bannière choisie : la fenêtre descend jusqu'au bouton « Commencer ».
   const bas = useRef<HTMLDivElement>(null);
