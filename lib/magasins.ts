@@ -1,6 +1,6 @@
 import { distanceMetres } from "./comparaison";
 
-export type MagasinProche = { nom: string; distance: number }; // distance en mètres
+export type MagasinProche = { nom: string; distance: number; latitude: number; longitude: number }; // distance en mètres
 
 const simple = (t: string) => t.toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
 
@@ -46,7 +46,8 @@ export async function magasinsProches(banniere: string, ici: { latitude: number;
       const adresse = [a.house_number, a.road].filter(Boolean).join(" ");
       const lieu = propre || [secteur, centre || adresse].filter(Boolean).join(" · ");
       const nom = [ville, lieu].filter(Boolean).join(" · ");
-      return { nom, distance: distanceMetres(ici, { latitude: Number(l.lat), longitude: Number(l.lon) }) };
+      const latitude = Number(l.lat), longitude = Number(l.lon);
+      return { nom, latitude, longitude, distance: distanceMetres(ici, { latitude, longitude }) };
     })
     .filter((m) => m.nom && Number.isFinite(m.distance))
     .sort((a, b) => a.distance - b.distance)
@@ -55,3 +56,12 @@ export async function magasinsProches(banniere: string, ici: { latitude: number;
 }
 
 export const distanceLisible = (m: number) => (m < 950 ? `${Math.round(m / 50) * 50} m` : `${(m / 1000).toLocaleString("fr-CA", { maximumFractionDigits: 1 })} km`);
+
+/** Itinéraire vers un magasin : dans Plans (Apple) ou dans Google Maps. */
+export function itineraires(m: { latitude: number; longitude: number }, banniere: string): { plans: string; google: string } {
+  const point = `${m.latitude.toFixed(6)},${m.longitude.toFixed(6)}`;
+  return {
+    plans: `https://maps.apple.com/?daddr=${point}&q=${encodeURIComponent(banniere)}&dirflg=d`,
+    google: `https://www.google.com/maps/dir/?api=1&destination=${point}&travelmode=driving`,
+  };
+}

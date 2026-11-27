@@ -11,7 +11,7 @@ import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
 import PromosProduit from "./PromosProduit";
-import { distanceLisible, magasinsProches, type MagasinProche } from "@/lib/magasins";
+import { distanceLisible, itineraires, magasinsProches, type MagasinProche } from "@/lib/magasins";
 import { BANNIERES, ICodeBarres, IPosition, IRecherche, PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, logoBanniere } from "./ui";
 
 /** Création d'une visite, ou modification d'une visite existante (bannière, magasin, date). */
@@ -84,6 +84,7 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
   // Une bannière choisie : on propose ses magasins les plus proches (OpenStreetMap). Le plus proche remplit le champ
   // s'il est vide ou s'il venait déjà d'une proposition ; ce que l'utilisateur a tapé lui-même n'est jamais remplacé.
   const [proches, setProches] = useState<MagasinProche[]>([]);
+  const [trajet, setTrajet] = useState<string | null>(null); // magasin dont on montre les choix d'itinéraire
   const propose = useRef<string | null>(visite?.magasin ?? null); // magasin venu d'une proposition ou de l'ancienne bannière
   const tape = useRef(false); // vrai dès que le nom du magasin est tapé à la main
   const demande = useRef(0);
@@ -173,9 +174,18 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
         {proches.length > 0 && (
           <div className="proches">
             {proches.map((m) => (
-              <button type="button" key={m.nom} className={magasin === m.nom ? "on" : ""} onClick={() => { propose.current = m.nom; tape.current = false; setMagasin(m.nom); }}>
-                {m.nom} <small>{distanceLisible(m.distance)}</small>
-              </button>
+              <div className="proche" key={m.nom}>
+                <button type="button" className={magasin === m.nom ? "on" : ""} onClick={() => { propose.current = m.nom; tape.current = false; setMagasin(m.nom); }}>
+                  {m.nom} <small>{distanceLisible(m.distance)}</small>
+                </button>
+                <button type="button" className={`aller ${trajet === m.nom ? "on" : ""}`} aria-label={`Itinéraire vers ${m.nom}`} aria-expanded={trajet === m.nom} onClick={() => setTrajet(trajet === m.nom ? null : m.nom)}><IPosition /></button>
+                {trajet === m.nom && (
+                  <div className="trajet">
+                    <a href={itineraires(m, banniere).plans} target="_blank" rel="noopener noreferrer">Plans</a>
+                    <a href={itineraires(m, banniere).google} target="_blank" rel="noopener noreferrer">Google Maps</a>
+                  </div>
+                )}
+              </div>
             ))}
             <small>Magasins proches : © OpenStreetMap</small>
           </div>

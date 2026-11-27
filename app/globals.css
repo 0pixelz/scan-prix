@@ -618,6 +618,12 @@ button.chercher-photo { padding: 6px 0; min-height: 0; border: 0; background: no
 /* Magasins proches proposés à la création d'une visite */
 .proches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .proches button { min-height: 0; padding: 7px 12px; border-radius: 99px; font-size: 13px; text-align: left; }
+.proches .proche { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 100%; }
+.proches .proche > button:first-child { flex: 0 1 auto; min-width: 0; }
+.proches button.aller { flex: none; width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+.proches button.aller svg { width: 17px; height: 17px; }
+.proches .trajet { flex-basis: 100%; display: flex; gap: 6px; }
+.proches .trajet a { padding: 7px 14px; border-radius: 99px; font-size: 13px; font-weight: 600; text-decoration: none; color: #fff; background: var(--accent); }
 .proches button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
 .proches button small { color: var(--muted); margin-left: 4px; }
 .proches > small { flex-basis: 100%; color: var(--muted); font-size: 11px; }
