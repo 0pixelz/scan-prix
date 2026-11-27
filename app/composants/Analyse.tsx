@@ -229,20 +229,42 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
           if (!baseCirc) return [];
           const vus = new Set<string>();
           const cumul = new Map<string, { banniere: string; ecarts: number[]; sansEcart: number }>();
+          // Par produit : le prix relevé chez la base et le prix de circulaire de chaque concurrent, ramené au même format.
+          const produits = new Map<string, Map<string, number>>();
           for (const p of promos) {
             const chez = p.visite_id ? banniereVisite.get(p.visite_id) : (p.source_prix ?? "").replace(/^Relevé\s*/, "");
             if (!chez || normaliser(chez) !== normaliser(baseCirc) || normaliser(p.banniere) === normaliser(baseCirc)) continue;
-            const cle = `${cupNormalise(p.cup) || normaliser(`${p.marque ?? ""} ${p.produit}`)}|${normaliser(p.banniere)}`;
+            const produit = cupNormalise(p.cup) || normaliser(`${p.marque ?? ""} ${p.produit}`);
+            const cle = `${produit}|${normaliser(p.banniere)}`;
             if (vus.has(cle)) continue;
             vus.add(cle);
             const c = cumul.get(normaliser(p.banniere)) ?? { banniere: p.banniere, ecarts: [], sansEcart: 0 };
-            if (p.ecart_pct === null || p.ecart_pct === undefined) c.sansEcart++; else c.ecarts.push(Number(p.ecart_pct));
+            if (p.ecart_pct === null || p.ecart_pct === undefined || !(Number(p.mon_prix) > 0)) c.sansEcart++;
+            else {
+              const e = Number(p.ecart_pct);
+              c.ecarts.push(e);
+              const prix = produits.get(produit) ?? new Map<string, number>([["", Number(p.mon_prix)]]);
+              prix.set(normaliser(p.banniere), Number(p.mon_prix) * (1 + e / 100));
+              produits.set(produit, prix);
+            }
             cumul.set(normaliser(p.banniere), c);
           }
-          return [...cumul.values()]
-            .map((c) => ({ banniere: c.banniere, n: c.ecarts.length, sansEcart: c.sansEcart, pct: c.ecarts.length ? c.ecarts.reduce((a, v) => a + v, 0) / c.ecarts.length : null }))
-            .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999));
+          // Indice comme celui des relevés : 100 = moyenne des bannières sur chaque produit ("" = la bannière de base).
+          const ratios = new Map<string, number[]>();
+          for (const prix of produits.values()) {
+            const moyenne = [...prix.values()].reduce((a, v) => a + v, 0) / prix.size;
+            if (!(moyenne > 0)) continue;
+            for (const [b, v] of prix) ratios.set(b, [...(ratios.get(b) ?? []), v / moyenne]);
+          }
+          const indiceDe = (b: string) => { const r = ratios.get(b); return r?.length ? (r.reduce((a, v) => a + v, 0) / r.length) * 100 : null; };
+          const lignesCirc = [...cumul.entries()]
+            .map(([cle, c]) => ({ banniere: c.banniere, base: false, n: c.ecarts.length, sansEcart: c.sansEcart, indice: indiceDe(cle), pct: c.ecarts.length ? c.ecarts.reduce((a, v) => a + v, 0) / c.ecarts.length : null }));
+          const indiceBase = indiceDe("");
+          if (indiceBase !== null) lignesCirc.push({ banniere: baseCirc, base: true, n: produits.size, sansEcart: 0, indice: indiceBase, pct: null });
+          return lignesCirc.sort((a, b) => (a.indice ?? 999) - (b.indice ?? 999));
         })();
+        const maxCirc = Math.max(100, ...circ.map((c) => c.indice ?? 0));
+        const minCirc = Math.min(...circ.map((c) => c.indice ?? 999));
         // Écart moyen de chaque bannière par rapport à la référence, sur les produits qui ont un prix de référence
         const ecartsRef = stats
           .map((s) => {
@@ -340,25 +362,27 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
             )}
             {baseCirc && circ.length > 0 && (
               <div className="card">
-                <h2>En circulaire face à {baseCirc}</h2>
+                <h2>Indice en circulaire face à {baseCirc}</h2>
                 {circ.map((c) => (
                   <div key={c.banniere} className="indice">
                     <PastilleBanniere banniere={c.banniere} doux />
                     <div className="grow">
                       <div className="row between">
                         <b>{c.banniere}</b>
-                        <b className={c.pct === null ? "" : couleur(c.pct)}>{c.pct === null ? "—" : pct(c.pct)}</b>
+                        <b className={c.indice !== null && c.indice === minCirc && c.indice < 99.95 ? "baisse" : ""}>{c.indice === null ? "—" : nombre(c.indice)}</b>
                       </div>
+                      {c.indice !== null && <div className="bar"><i style={{ width: `${(c.indice / maxCirc) * 100}%` }} /></div>}
                       <div className="muted">
-                        {c.n > 0 ? `${c.n} offre${c.n > 1 ? "s" : ""} comparée${c.n > 1 ? "s" : ""}` : "aucune offre comparable"}
-                        {c.sansEcart > 0 ? ` · ${c.sansEcart} sans écart (format inconnu)` : ""}
+                        {c.base
+                          ? `prix relevé en magasin · ${c.n} produit${c.n > 1 ? "s" : ""}`
+                          : <>{c.pct !== null && <><span className={couleur(c.pct)}>{pct(c.pct)}</span> face à {baseCirc} · </>}{c.n > 0 ? `${c.n} offre${c.n > 1 ? "s" : ""} comparée${c.n > 1 ? "s" : ""}` : "aucune offre comparable"}{c.sansEcart > 0 ? ` · ${c.sansEcart} sans écart (format inconnu)` : ""}</>}
                       </div>
                     </div>
                   </div>
                 ))}
                 <div className="source-circ">
                   <img src="/bannieres/reebee.webp" alt="reebee" />
-                  <span>Prix des circulaires en cours (Flipp et reebee, source non officielle) des produits dont tu as cherché les promos, face au prix relevé chez {baseCirc}. Au prix par unité quand le format diffère. Seuls les produits en spécial comptent : ce n'est pas un indice de tout le panier.</span>
+                  <span>Indice : 100 = moyenne des bannières, plus bas = moins cher. Prix des circulaires en cours (Flipp et reebee, source non officielle) des produits dont tu as cherché les promos, face au prix relevé chez {baseCirc}. Au prix par unité quand le format diffère. Seuls les produits en spécial comptent : ce n'est pas un indice de tout le panier.</span>
                 </div>
               </div>
             )}
