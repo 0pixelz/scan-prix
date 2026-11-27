@@ -621,3 +621,13 @@ button.chercher-photo { padding: 6px 0; min-height: 0; border: 0; background: no
 .proches button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
 .proches button small { color: var(--muted); margin-left: 4px; }
 .proches > small { flex-basis: 100%; color: var(--muted); font-size: 11px; }
+
+/* Spéciaux des circulaires dans la liste à relever */
+.source-liste { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; color: var(--muted); font-size: 11px; }
+.source-liste img { width: 22px; height: 22px; border-radius: 6px; flex: none; }
+button.offre-liste { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 0; margin-top: 6px; padding: 7px 9px; border-radius: 12px; text-align: left; background: var(--bg); border: 1px solid var(--line); }
+button.offre-liste .ic { width: 28px; height: 28px; border-radius: 8px; flex: none; }
+button.offre-liste .d { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+button.offre-liste b { font-size: 13px; }
+button.offre-liste small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.offre-liste .pill { flex: none; margin: 0; }

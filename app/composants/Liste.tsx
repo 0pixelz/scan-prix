@@ -7,10 +7,18 @@ import type { ListeNom, ProduitListe, Scan, Visite } from "@/lib/types";
 import { ScannerCode } from "./Fenetres";
 import IconeProduit from "./IconeProduit";
 import { Fantomes } from "./Gestes";
-import { ICoche, ICodeBarres, IFermer, IListe, IPlus, IRecherche, chargerTout } from "./ui";
+import { ICoche, ICodeBarres, IFermer, IListe, IPlus, IRecherche, PastilleBanniere, argent, chargerTout, dateLisible } from "./ui";
+import Visionneuse from "./Visionneuse";
+import { nomParCode } from "@/lib/image";
+import { auQuebec, emplacementOffre, etiquetteVerdict, imageOffre, lienSite, type Offre } from "@/lib/promos";
+
+type Garde = { quand: number; offres: Record<string, Offre[]> };
+const DUREE = 6 * 3600 * 1000;
 
 /** Liste des produits à relever : coche automatique quand le produit est scanné dans la visite en cours. */
-export default function Liste({ liste, scans, visite, recharger, listes, listeId, choisir, rechargerListes, lecture }: {
+export default function Liste({ liste, scans, visite, recharger, listes, listeId, choisir, rechargerListes, lecture, codePostal, refuse }: {
+  codePostal: string; // région des circulaires
+  refuse: () => void;
   listes: ListeNom[];
   listeId: string | null; // null = liste principale
   choisir: (id: string | null) => void;
@@ -60,6 +68,54 @@ export default function Liste({ liste, scans, visite, recharger, listes, listeId
     await rechargerListes();
   }
 
+  // ---------- Circulaires : où chaque produit de la liste est en spécial cette semaine ----------
+  const [promos, setPromos] = useState<Garde | null>(null);
+  const [rechercheP, setRechercheP] = useState(false);
+  const [offreVue, setOffreVue] = useState<{ image: string; lien: { libelle: string; href: string } } | null>(null);
+  const codeValide = /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/.test(codePostal.trim());
+  const clePromos = `scanprix.promosliste.${listeId ?? "principale"}`;
+  const ids = liste.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (!codeValide || !liste.length) return setPromos(null);
+    let garde: Garde = { quand: 0, offres: {} };
+    try {
+      const g = JSON.parse(sessionStorage.getItem(clePromos) ?? "null") as Garde | null;
+      if (g && Date.now() - g.quand < DUREE) garde = g;
+    } catch { /* stockage indisponible */ }
+    setPromos(garde.quand ? garde : null);
+    // Seuls les produits pas encore cherchés (liste ouverte, produit ajouté ou code-barres scanné) partent en recherche.
+    const manquants = liste.filter((p) => !(p.id in garde.offres)).slice(0, 30);
+    if (!manquants.length) return;
+    let annule = false;
+    setRechercheP(true);
+    sb.functions.invoke("promos", { body: { codePostal, exclure: [], produits: manquants.map((p) => ({ id: p.id, nom: p.nom, marque: null, format: null })) } }).then(({ data, error }) => {
+      if (annule) return;
+      setRechercheP(false);
+      if (data?.acces === false) return refuse();
+      if (error || !data || data.error) return;
+      const trouvees = Object.fromEntries((data.resultats as { id: string; offres: Offre[] }[]).map((x) => [x.id, x.offres.filter((o) => auQuebec(o.banniere)).sort((a, b) => a.prix - b.prix).slice(0, 4)]));
+      const g: Garde = { quand: garde.quand || Date.now(), offres: { ...garde.offres, ...trouvees } };
+      setPromos(g);
+      try { sessionStorage.setItem(clePromos, JSON.stringify(g)); } catch { /* stockage indisponible */ }
+    });
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids, clePromos, codeValide, codePostal]);
+
+  // Code-barres scanné : le nom du produit est proposé d'après le code (produit déjà relevé, sinon base ouverte).
+  const [chercheNom, setChercheNom] = useState(false);
+  async function codeLu(code: string) {
+    setCup(code);
+    setLecteur(false);
+    if (nom.trim()) return;
+    const connu = scans.find((s) => s.cup && correspond({ nom: "", cup: code }, s));
+    if (connu?.produit) return setNom([connu.marque, connu.produit, connu.format].filter(Boolean).join(" "));
+    setChercheNom(true);
+    const trouve = await nomParCode(code);
+    setChercheNom(false);
+    if (trouve) setNom((actuel) => actuel.trim() || trouve);
+  }
+
   const releves = new Set(liste.filter((p) => scans.some((s) => correspond(p, s))).map((p) => p.id));
   const tries = [...liste].sort((a, b) => Number(releves.has(a.id)) - Number(releves.has(b.id)));
 
@@ -80,7 +136,8 @@ export default function Liste({ liste, scans, visite, recharger, listes, listeId
   }
 
   if (choix) return <><main /><ChoixProduits liste={liste} listeId={listeId} fermer={() => setChoix(false)} ajoutes={() => { setChoix(false); recharger(); }} /></>;
-  if (lecteur) return <><main /><ScannerCode fermer={() => setLecteur(false)} lu={(code) => { setCup(code); setLecteur(false); }} /></>;
+  if (lecteur) return <><main /><ScannerCode fermer={() => setLecteur(false)} lu={codeLu} /></>;
+  if (offreVue) return <><main /><Visionneuse src={offreVue.image} lien={offreVue.lien} fermer={() => setOffreVue(null)} /></>;
 
   return (
     <main>
@@ -104,7 +161,7 @@ export default function Liste({ liste, scans, visite, recharger, listes, listeId
 
       {!lecture && <form className="card" onSubmit={ajouter}>
         <h2>Ajouter un produit à relever</h2>
-        <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Ex. Beurre salé 454 g" />
+        <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder={chercheNom ? "Recherche du produit d'après le code…" : "Ex. Beurre salé 454 g"} />
         <div className="row" style={{ marginTop: 8 }}>
           <input className="grow" value={cup} inputMode="numeric" onChange={(e) => setCup(e.target.value)} placeholder="CUP (facultatif)" />
           <button type="button" aria-label="Scanner le code-barres" onClick={() => setLecteur(true)}><ICodeBarres /></button>
@@ -121,6 +178,16 @@ export default function Liste({ liste, scans, visite, recharger, listes, listeId
           {liste.length > 0 && <span className="muted">{releves.size} sur {liste.length} relevés{visite ? ` · ${visite.banniere}` : ""}</span>}
         </div>
         {liste.length > 0 && <div className="bar"><i style={{ width: `${(releves.size / liste.length) * 100}%` }} /></div>}
+        {liste.length > 0 && (
+          <div className="source-liste">
+            <img src="/bannieres/reebee.webp" alt="reebee" />
+            <span>
+              {!codeValide ? "Entre ton code postal dans Réglages, Circulaires et alertes, pour voir ici les spéciaux des circulaires."
+                : rechercheP ? "Recherche des spéciaux dans les circulaires…"
+                : "Spéciaux de la semaine d'après les circulaires de Flipp et reebee (source non officielle), à confirmer. Touche une offre pour la voir."}
+            </span>
+          </div>
+        )}
         {!liste.length && (
           <div className="empty">
             <IListe />
@@ -134,6 +201,23 @@ export default function Liste({ liste, scans, visite, recharger, listes, listeId
             <div className="mid">
               <div className="t">{p.nom}</div>
               {p.cup && <div className="s">CUP {p.cup}</div>}
+              {(promos?.offres[p.id] ?? []).map((o, i) => {
+                const site = lienSite(o.banniere, { produit: p.nom });
+                const image = imageOffre(o.image);
+                const place = emplacementOffre(o);
+                return (
+                  <button type="button" key={i} className="offre-liste" aria-label={`Voir l'offre de ${o.banniere}`}
+                    onClick={() => (image ? setOffreVue({ image, lien: site }) : window.open(site.href, "_blank", "noopener,noreferrer"))}>
+                    <PastilleBanniere banniere={o.banniere} doux />
+                    <span className="d">
+                      <b>{o.banniere} · {o.quantite > 1 ? `${o.quantite} pour ${argent(o.prixOffre)}` : argent(o.prix)}</b>
+                      <small>{o.nom}</small>
+                      <small>{[o.fin ? `jusqu'au ${dateLisible(new Date(o.fin).toLocaleDateString("en-CA"))}` : null, o.verdict === "identique" ? null : etiquetteVerdict(o.verdict, false).texte.split(" · ")[0]].filter(Boolean).join(" · ")}</small>
+                    </span>
+                    {place && <span className={`pill ${o.page === 1 || o.page === o.pages ? "promo" : "membre"}`}>{place}</span>}
+                  </button>
+                );
+              })}
             </div>
             {!lecture && <button className="ghost icone" aria-label={`Retirer ${p.nom}`} onClick={() => retirer(p.id)}><IFermer /></button>}
           </div>

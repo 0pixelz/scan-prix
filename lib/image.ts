@@ -57,6 +57,26 @@ export async function imageProduit(cup: string | null | undefined): Promise<stri
   return null;
 }
 
+/** Nom d'un produit d'après son code-barres (bases ouvertes Open Facts) : marque, nom et format, ou null s'il est inconnu. */
+export async function nomParCode(cup: string | null | undefined): Promise<string | null> {
+  const codes = codesPossibles(cup);
+  for (const base of BASES) {
+    for (const code of codes) {
+      try {
+        const rep = await fetch(`https://${base}/api/v2/product/${code}.json?fields=code,product_name_fr,product_name,brands,quantity`, { signal: AbortSignal.timeout(6000) });
+        if (!rep.ok) continue;
+        const p = (await rep.json())?.product;
+        const nom = String(p?.product_name_fr || p?.product_name || "").trim();
+        if (!nom) continue;
+        const marque = String(p?.brands ?? "").split(",")[0].trim();
+        const dejaMarque = marque && normaliser(nom).includes(normaliser(marque));
+        return [dejaMarque ? null : marque, nom, String(p?.quantity ?? "").trim()].filter(Boolean).join(" ").slice(0, 120);
+      } catch { return null; }
+    }
+  }
+  return null;
+}
+
 const mots = (t: string | null | undefined) => normaliser(t ?? "").split(" ").filter((m) => m.length >= 3 && !/^\d+$/.test(m));
 
 /**

@@ -882,7 +882,7 @@ function App({ refuse }: { refuse: () => void }) {
         </Principal>
       )}
 
-      {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} listes={listes} listeId={listeId} choisir={setListeId} rechargerListes={chargerListes} lecture={lecture} />}
+      {onglet === "liste" && <Liste liste={liste} scans={scans} visite={visite} recharger={chargerListe} listes={listes} listeId={listeId} choisir={setListeId} rechargerListes={chargerListes} lecture={lecture} codePostal={reglages.codePostal} refuse={refuse} />}
 
       {onglet === "comparer" && <Analyse key={`${vueAnalyse}-${version}`} historique={setHistorique} vueInitiale={vueAnalyse} visiteId={visite?.id ?? null} refuse={refuse}
         codePostal={reglages.codePostal} changerCodePostal={(c) => { enregistrerReglages({ ...reglagesRef.current, codePostal: c }).then((e) => e && setErreur(e)); }}
