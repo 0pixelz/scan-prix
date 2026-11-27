@@ -109,8 +109,11 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
           {...(lien ? { href: lien, target: "_blank", rel: "noopener noreferrer", "aria-label": site.libelle } : {})}>
           <PastilleBanniere banniere={o.banniere} doux />
           <div className="mid">
-            <div className="t">{o.banniere} <span className={`pill ${etiquetteVerdict(o.verdict, true).style}`}>{o.verdict === "proche" ? "Proche" : etiquetteVerdict(o.verdict, true).texte}</span>
-              {emplacementOffre(o) && <> <span className={`pill ${o.page === 1 || o.page === o.pages ? "promo" : "membre"}`}>{emplacementOffre(o)}</span></>}
+            <div className="t"><span className="nom">{o.banniere}</span>
+              <span className="tags">
+                <span className={`pill ${etiquetteVerdict(o.verdict, true).style}`}>{o.verdict === "proche" ? "Proche" : etiquetteVerdict(o.verdict, true).texte}</span>
+                {emplacementOffre(o) && <span className={`pill ${o.page === 1 || o.page === o.pages ? "promo" : "membre"}`}>{emplacementOffre(o)}</span>}
+              </span>
             </div>
             <div className="s">{o.nom}</div>
             <div className="s">{[o.quantite > 1 ? `${o.quantite} pour ${argent(o.prixOffre)}` : null, o.fin ? `jusqu'au ${dateLisible(new Date(o.fin).toLocaleDateString("en-CA"))}` : null, e?.parUnite].filter(Boolean).join(" · ")}</div>
