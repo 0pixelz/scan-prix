@@ -26,7 +26,7 @@ import {
   PastilleBanniere, argent, aujourdhui, chargerReferences, chargerTout, dateLisible, datePhoto, momentLisible, reduire,
   logoBanniere,
 } from "./composants/ui";
-import { clePromo, pctLisible } from "@/lib/promos";
+import { clePromo, formatEconomique, pctLisible } from "@/lib/promos";
 
 type Onglet = "scan" | "liste" | "comparer" | "plus" | "assistant" | "visites" | "reglages";
 type Filtre = "tous" | "promos" | "verifier" | "doublons";
@@ -216,15 +216,15 @@ function App({ refuse }: { refuse: () => void }) {
   }, []);
 
   // Promos de circulaires gardées (dernières recherches) : affichées sur chaque prix, avec le logo des concurrents.
-  const [promosGardees, setPromosGardees] = useState<Map<string, { banniere: string; prix: number; ecart: number | null }[]>>(new Map());
+  const [promosGardees, setPromosGardees] = useState<Map<string, { banniere: string; prix: number; ecart: number | null; emplacement: string | null; economique: boolean }[]>>(new Map());
   const chargerPromos = useCallback(async () => {
-    const { data } = await sb.from("promos_circulaires").select("visite_id, produit, marque, cup, banniere, prix, ecart_pct, fin").limit(2000);
-    const m = new Map<string, { banniere: string; prix: number; ecart: number | null }[]>();
-    for (const p of (data ?? []) as { visite_id: string | null; produit: string; marque: string | null; cup: string | null; banniere: string; prix: number; ecart_pct: number | null; fin: string | null }[]) {
+    const { data } = await sb.from("promos_circulaires").select("visite_id, produit, marque, format, format_offre, emplacement, cup, banniere, prix, ecart_pct, fin").limit(2000);
+    const m = new Map<string, { banniere: string; prix: number; ecart: number | null; emplacement: string | null; economique: boolean }[]>();
+    for (const p of (data ?? []) as { visite_id: string | null; produit: string; marque: string | null; format: string | null; format_offre: string | null; emplacement: string | null; cup: string | null; banniere: string; prix: number; ecart_pct: number | null; fin: string | null }[]) {
       if (p.fin && Date.parse(p.fin) < Date.now()) continue;
       const k = `${p.visite_id ?? ""}|${clePromo(p)}`;
       const l = m.get(k) ?? [];
-      if (!l.some((x) => x.banniere === p.banniere)) l.push({ banniere: p.banniere, prix: Number(p.prix), ecart: p.ecart_pct === null ? null : Number(p.ecart_pct) });
+      if (!l.some((x) => x.banniere === p.banniere)) l.push({ banniere: p.banniere, prix: Number(p.prix), ecart: p.ecart_pct === null ? null : Number(p.ecart_pct), emplacement: p.emplacement ?? null, economique: formatEconomique(p.format, p.format_offre) });
       m.set(k, l);
     }
     for (const l of m.values()) l.sort((a, b) => (a.ecart ?? 999) - (b.ecart ?? 999)); // la meilleure offre d'abord
@@ -698,6 +698,8 @@ function App({ refuse }: { refuse: () => void }) {
                   en circulaire : {argent(enCirculaire[0].prix)}
                   {enCirculaire[0].ecart !== null ? ` (${pctLisible(enCirculaire[0].ecart)})` : ""}
                 </span>
+                {enCirculaire[0].emplacement && <span className={`pill ${/^(Front|Back)/.test(enCirculaire[0].emplacement) ? "promo" : "membre"}`}>{enCirculaire[0].emplacement}</span>}
+                {enCirculaire[0].economique && <span className="pill pts">Format économique</span>}
               </div>
             )}
           </div>
