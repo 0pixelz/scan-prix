@@ -77,6 +77,34 @@ export async function nomParCode(cup: string | null | undefined): Promise<string
   return null;
 }
 
+export type NutriScore = "A" | "B" | "C" | "D" | "E";
+
+/**
+ * Nutri-Score d'un aliment d'après son code-barres (Open Food Facts), ou null s'il est inconnu.
+ * Gardé en mémoire sur l'appareil : 30 jours s'il est trouvé, 7 jours sinon.
+ */
+export async function nutriScore(cup: string | null | undefined): Promise<NutriScore | null> {
+  const codes = codesPossibles(cup);
+  if (!codes.length) return null;
+  const cle = `scanprix.nutri.${codes[0]}`;
+  try {
+    const garde = JSON.parse(localStorage.getItem(cle) ?? "null") as { n: NutriScore | null; t: number } | null;
+    if (garde && Date.now() - garde.t < (garde.n ? 30 : 7) * 86400000) return garde.n;
+  } catch { /* mémoire illisible : on redemande */ }
+  let note: NutriScore | null = null;
+  for (const code of codes) {
+    try {
+      const rep = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=code,nutriscore_grade,nutrition_grades`, { signal: AbortSignal.timeout(6000) });
+      if (!rep.ok) continue;
+      const p = (await rep.json())?.product;
+      const lettre = String(p?.nutriscore_grade || p?.nutrition_grades || "").trim().toUpperCase();
+      if (/^[A-E]$/.test(lettre)) { note = lettre as NutriScore; break; }
+    } catch { return null; } // hors ligne : on réessaiera, sans rien retenir
+  }
+  try { localStorage.setItem(cle, JSON.stringify({ n: note, t: Date.now() })); } catch { /* mémoire pleine */ }
+  return note;
+}
+
 const mots = (t: string | null | undefined) => normaliser(t ?? "").split(" ").filter((m) => m.length >= 3 && !/^\d+$/.test(m));
 
 /**

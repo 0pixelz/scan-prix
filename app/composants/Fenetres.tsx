@@ -6,7 +6,7 @@ import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type G
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
-import { chercherImage, cleImage, imageEnGrand, noterEssai, sourceImage } from "@/lib/image";
+import { chercherImage, cleImage, imageEnGrand, noterEssai, sourceImage, nutriScore, type NutriScore } from "@/lib/image";
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
@@ -287,6 +287,12 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   const [confirmer, setConfirmer] = useState(false);
   const [lecteur, setLecteur] = useState(false);
   const [agrandie, setAgrandie] = useState(false);
+  const [nutri, setNutri] = useState<NutriScore | null>(null);
+  useEffect(() => {
+    let actif = true;
+    nutriScore(scan.cup).then((n) => { if (actif) setNutri(n); });
+    return () => { actif = false; };
+  }, [scan.cup]);
 
   useEffect(() => {
     if (!scan.photo_path) return;
@@ -419,6 +425,13 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
           <button type="button" className="lien chercher-photo" disabled={recherchePhoto === "cours"} onClick={chercherPhoto}>
             {recherchePhoto === "cours" ? "Recherche d'une photo…" : recherchePhoto === "rien" ? "Aucune photo trouvée. Réessayer" : "Chercher une photo du produit"}
           </button>
+        )}
+        {nutri && (
+          <div className="nutri" aria-label={`Nutri-Score ${nutri}`}>
+            <b className={`n${nutri}`}>{nutri}</b>
+            <span>Nutri-Score {nutri}</span>
+            <small>Open Food Facts</small>
+          </div>
         )}
         <PromosProduit scan={scan} banniere={banniere ?? null} codePostal={codePostal ?? ""} seuil={seuil ?? 5} lecture={lecture} change={promosChange} voir={(image, lien) => setOffreVue({ image, lien })} />
         {(unite || reference) && (

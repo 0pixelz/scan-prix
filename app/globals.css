@@ -648,3 +648,9 @@ button.offre-liste .pill { flex: none; margin: 0; }
 .logos-rebond img { width: 30px; height: 30px; padding: 3px; border-radius: 9px; background: #fff; object-fit: contain; box-shadow: var(--shadow); animation: rebond 1.3s ease-in-out infinite; }
 @keyframes rebond { 0%, 55%, 100% { transform: translateY(0); } 25% { transform: translateY(-11px); } 40% { transform: translateY(0); } 47% { transform: translateY(-3px); } }
 @media (prefers-reduced-motion: reduce) { .logos-rebond img { animation: none; } }
+
+/* Nutri-Score (Open Food Facts) sur la fiche d'un produit */
+.nutri { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; font-size: 13px; font-weight: 600; }
+.nutri b { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
+.nutri b.nA { background: #038141; } .nutri b.nB { background: #5a9a1e; } .nutri b.nC { background: #c79a00; } .nutri b.nD { background: #d96f00; } .nutri b.nE { background: #d93a10; }
+.nutri small { color: var(--muted); font-weight: 400; font-size: 11px; }
