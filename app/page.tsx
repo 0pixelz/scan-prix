@@ -685,7 +685,7 @@ function App({ refuse }: { refuse: () => void }) {
                 Réf. {argent(ref!.prix)} · {ecartRef > 0 ? "+" : ""}{ecartRef.toLocaleString("fr-CA", { maximumFractionDigits: 1 })} %
               </span>
             )}{" "}
-            {s.prix_membre && <span className="pill membre">Prix membre</span>}{" "}
+            {s.prix_membre && <span className="pill pts">Prix membre</span>}{" "}
             {s.points ? <span className="pill pts">{s.points.toLocaleString("fr-CA")} points</span> : null}{" "}
             {incertain && <span className="pill verif">À vérifier</span>}{" "}
             {enDouble.has(s.id) && <span className="pill verif">Doublon</span>}

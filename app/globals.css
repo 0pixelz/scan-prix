@@ -650,7 +650,19 @@ button.offre-liste .pill { flex: none; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .logos-rebond img { animation: none; } }
 
 /* Nutri-Score (Open Food Facts) sur la fiche d'un produit */
-.nutri { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; font-size: 13px; font-weight: 600; }
-.nutri b { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
-.nutri b.nA { background: #038141; } .nutri b.nB { background: #5a9a1e; } .nutri b.nC { background: #c79a00; } .nutri b.nD { background: #d96f00; } .nutri b.nE { background: #d93a10; }
-.nutri small { color: var(--muted); font-weight: 400; font-size: 11px; }
+.nutri-bloc { margin: 8px 0 2px; }
+button.nutri { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 0; padding: 0; border: 0; background: none; text-align: left; font-size: 13px; font-weight: 600; color: inherit; }
+.nutri b, .nutri-details .echelle b { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; flex: none; }
+.nA { background: #038141; } .nB { background: #5a9a1e; } .nC { background: #c79a00; } .nD { background: #d96f00; } .nE { background: #d93a10; }
+.nutri span { flex: 1; min-width: 0; }
+.nutri span small { display: block; color: var(--muted); font-weight: 400; font-size: 11.5px; }
+.nutri i { font-style: normal; color: var(--accent); font-size: 13px; }
+.nutri-details { margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; font-size: 13px; }
+.nutri-details .echelle { display: flex; gap: 4px; }
+.nutri-details .echelle b:not(.on) { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.nutri-details p { margin: 10px 0; color: var(--muted); line-height: 1.4; }
+.nutri-details ul { list-style: none; margin: 0 0 8px; padding: 0; }
+.nutri-details li { display: grid; grid-template-columns: 1fr auto 62px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.nutri-details li em { font-style: normal; font-size: 11px; font-weight: 600; text-align: right; }
+.nutri-details li em.low { color: var(--ok); } .nutri-details li em.moderate { color: var(--warn); } .nutri-details li em.high { color: var(--bad); }
+.nutri-details > small { color: var(--muted); font-size: 11px; }

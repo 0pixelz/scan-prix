@@ -6,7 +6,7 @@ import { cupNormalise, distanceMetres, grouper, normaliser, prixEffectif, type G
 import { prixParUnite, texteUnite } from "@/lib/unite";
 import { TYPES_PRODUIT } from "@/lib/icones";
 import { CATEGORIES, type Reference, type Scan, type Visite } from "@/lib/types";
-import { chercherImage, cleImage, imageEnGrand, noterEssai, sourceImage, nutriScore, type NutriScore } from "@/lib/image";
+import { chercherImage, cleImage, imageEnGrand, noterEssai, sourceImage, nutriScore, SENS_NUTRI, type Nutrition } from "@/lib/image";
 import Graphique from "./Graphique";
 import IconeProduit from "./IconeProduit";
 import Visionneuse from "./Visionneuse";
@@ -287,7 +287,8 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
   const [confirmer, setConfirmer] = useState(false);
   const [lecteur, setLecteur] = useState(false);
   const [agrandie, setAgrandie] = useState(false);
-  const [nutri, setNutri] = useState<NutriScore | null>(null);
+  const [nutri, setNutri] = useState<Nutrition | null>(null);
+  const [nutriOuvert, setNutriOuvert] = useState(false);
   useEffect(() => {
     let actif = true;
     nutriScore(scan.cup).then((n) => { if (actif) setNutri(n); });
@@ -427,10 +428,32 @@ export function Edition({ scan, fermer, enregistre, supprime, historique, lectur
           </button>
         )}
         {nutri && (
-          <div className="nutri" aria-label={`Nutri-Score ${nutri}`}>
-            <b className={`n${nutri}`}>{nutri}</b>
-            <span>Nutri-Score {nutri}</span>
-            <small>Open Food Facts</small>
+          <div className="nutri-bloc">
+            <button type="button" className="nutri" aria-expanded={nutriOuvert} onClick={() => setNutriOuvert((v) => !v)}>
+              <b className={`n${nutri.note}`}>{nutri.note}</b>
+              <span>Nutri-Score {nutri.note}<small>{SENS_NUTRI[nutri.note]}</small></span>
+              <i>{nutriOuvert ? "Masquer" : "Détails"}</i>
+            </button>
+            {nutriOuvert && (
+              <div className="nutri-details">
+                <div className="echelle" aria-hidden="true">
+                  {(["A", "B", "C", "D", "E"] as const).map((l) => <b key={l} className={`n${l} ${l === nutri.note ? "on" : ""}`}>{l}</b>)}
+                </div>
+                <p>Note de A (meilleur) à E (moins bon) sur la qualité nutritionnelle pour 100 g. Les calories, les sucres, les gras saturés et le sel font baisser la note ; les fibres, les protéines, les fruits et les légumes la font monter. Elle sert à comparer des produits de même type.</p>
+                {nutri.valeurs.length > 0 && (
+                  <ul>
+                    {nutri.valeurs.map((v) => (
+                      <li key={v.cle}>
+                        <span>{v.nom}</span>
+                        <b>{v.valeur.toLocaleString("fr-CA", { maximumFractionDigits: v.unite === "kcal" ? 0 : 1 })} {v.unite}</b>
+                        {v.niveau ? <em className={v.niveau}>{v.niveau === "low" ? "Faible" : v.niveau === "moderate" ? "Modéré" : "Élevé"}</em> : <em />}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <small>Pour 100 g{nutri.points !== null ? ` · pointage ${nutri.points} (plus bas = meilleur)` : ""} · Source : Open Food Facts</small>
+              </div>
+            )}
           </div>
         )}
         <PromosProduit scan={scan} banniere={banniere ?? null} codePostal={codePostal ?? ""} seuil={seuil ?? 5} lecture={lecture} change={promosChange} voir={(image, lien) => setOffreVue({ image, lien })} />

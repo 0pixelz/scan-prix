@@ -78,31 +78,67 @@ export async function nomParCode(cup: string | null | undefined): Promise<string
 }
 
 export type NutriScore = "A" | "B" | "C" | "D" | "E";
+export type Niveau = "low" | "moderate" | "high";
+/** Nutri-Score d'un aliment et ce qui l'explique : valeurs pour 100 g et niveaux (faible, modéré, élevé). */
+export type Nutrition = {
+  note: NutriScore;
+  points: number | null; // pointage du Nutri-Score : plus il est bas, meilleur est le produit
+  valeurs: { cle: string; nom: string; valeur: number; unite: string; niveau: Niveau | null }[];
+};
+
+export const SENS_NUTRI: Record<NutriScore, string> = {
+  A: "Très bonne qualité nutritionnelle",
+  B: "Bonne qualité nutritionnelle",
+  C: "Qualité nutritionnelle moyenne",
+  D: "Qualité nutritionnelle faible",
+  E: "Qualité nutritionnelle très faible",
+};
+
+const NUTRIMENTS: [cle: string, nom: string, unite: string, niveau: string | null][] = [
+  ["energy-kcal_100g", "Calories", "kcal", null],
+  ["fat_100g", "Lipides", "g", "fat"],
+  ["saturated-fat_100g", "Gras saturés", "g", "saturated-fat"],
+  ["sugars_100g", "Sucres", "g", "sugars"],
+  ["salt_100g", "Sel", "g", "salt"],
+  ["fiber_100g", "Fibres", "g", null],
+  ["proteins_100g", "Protéines", "g", null],
+];
 
 /**
  * Nutri-Score d'un aliment d'après son code-barres (Open Food Facts), ou null s'il est inconnu.
  * Gardé en mémoire sur l'appareil : 30 jours s'il est trouvé, 7 jours sinon.
  */
-export async function nutriScore(cup: string | null | undefined): Promise<NutriScore | null> {
+export async function nutriScore(cup: string | null | undefined): Promise<Nutrition | null> {
   const codes = codesPossibles(cup);
   if (!codes.length) return null;
-  const cle = `scanprix.nutri.${codes[0]}`;
+  const cle = `scanprix.nutrition.${codes[0]}`;
   try {
-    const garde = JSON.parse(localStorage.getItem(cle) ?? "null") as { n: NutriScore | null; t: number } | null;
+    const garde = JSON.parse(localStorage.getItem(cle) ?? "null") as { n: Nutrition | null; t: number } | null;
     if (garde && Date.now() - garde.t < (garde.n ? 30 : 7) * 86400000) return garde.n;
   } catch { /* mémoire illisible : on redemande */ }
-  let note: NutriScore | null = null;
+  let trouve: Nutrition | null = null;
   for (const code of codes) {
     try {
-      const rep = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=code,nutriscore_grade,nutrition_grades`, { signal: AbortSignal.timeout(6000) });
+      const rep = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=code,nutriscore_grade,nutrition_grades,nutriscore_score,nutrient_levels,nutriments`, { signal: AbortSignal.timeout(6000) });
       if (!rep.ok) continue;
       const p = (await rep.json())?.product;
       const lettre = String(p?.nutriscore_grade || p?.nutrition_grades || "").trim().toUpperCase();
-      if (/^[A-E]$/.test(lettre)) { note = lettre as NutriScore; break; }
+      if (!/^[A-E]$/.test(lettre)) continue;
+      const n = (p?.nutriments ?? {}) as Record<string, unknown>;
+      const niveaux = (p?.nutrient_levels ?? {}) as Record<string, unknown>;
+      const valeurs = NUTRIMENTS.flatMap(([k, nom, unite, niv]) => {
+        const v = Number(n[k]);
+        if (n[k] === undefined || n[k] === null || n[k] === "" || !Number.isFinite(v) || v < 0) return [];
+        const niveau = niv && /^(low|moderate|high)$/.test(String(niveaux[niv])) ? (String(niveaux[niv]) as Niveau) : null;
+        return [{ cle: k, nom, valeur: v, unite, niveau }];
+      });
+      const points = Number(p?.nutriscore_score);
+      trouve = { note: lettre as NutriScore, points: p?.nutriscore_score !== undefined && Number.isFinite(points) ? points : null, valeurs };
+      break;
     } catch { return null; } // hors ligne : on réessaiera, sans rien retenir
   }
-  try { localStorage.setItem(cle, JSON.stringify({ n: note, t: Date.now() })); } catch { /* mémoire pleine */ }
-  return note;
+  try { localStorage.setItem(cle, JSON.stringify({ n: trouve, t: Date.now() })); } catch { /* mémoire pleine */ }
+  return trouve;
 }
 
 const mots = (t: string | null | undefined) => normaliser(t ?? "").split(" ").filter((m) => m.length >= 3 && !/^\d+$/.test(m));
