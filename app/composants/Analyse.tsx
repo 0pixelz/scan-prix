@@ -222,6 +222,27 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
         const face = base ? ecartsFace(lignes, base) : [];
         const faceReg = new Map((base ? ecartsFace(lignesReg, base) : []).map((f) => [normaliser(f.banniere), f]));
         const couleur = (v: number) => (v < -0.05 ? "hausse" : v > 0.05 ? "baisse" : "");
+        // Écart des prix de circulaire (Flipp et reebee) des concurrents face aux prix relevés chez la bannière de base.
+        const banniereVisite = new Map(scans.map((x) => [x.visite_id, x.visites?.banniere ?? ""]));
+        const baseCirc = base ?? stats[0]?.banniere ?? null;
+        const circ = (() => {
+          if (!baseCirc) return [];
+          const vus = new Set<string>();
+          const cumul = new Map<string, { banniere: string; ecarts: number[]; sansEcart: number }>();
+          for (const p of promos) {
+            const chez = p.visite_id ? banniereVisite.get(p.visite_id) : (p.source_prix ?? "").replace(/^Relevé\s*/, "");
+            if (!chez || normaliser(chez) !== normaliser(baseCirc) || normaliser(p.banniere) === normaliser(baseCirc)) continue;
+            const cle = `${cupNormalise(p.cup) || normaliser(`${p.marque ?? ""} ${p.produit}`)}|${normaliser(p.banniere)}`;
+            if (vus.has(cle)) continue;
+            vus.add(cle);
+            const c = cumul.get(normaliser(p.banniere)) ?? { banniere: p.banniere, ecarts: [], sansEcart: 0 };
+            if (p.ecart_pct === null || p.ecart_pct === undefined) c.sansEcart++; else c.ecarts.push(Number(p.ecart_pct));
+            cumul.set(normaliser(p.banniere), c);
+          }
+          return [...cumul.values()]
+            .map((c) => ({ banniere: c.banniere, n: c.ecarts.length, sansEcart: c.sansEcart, pct: c.ecarts.length ? c.ecarts.reduce((a, v) => a + v, 0) / c.ecarts.length : null }))
+            .sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999));
+        })();
         // Écart moyen de chaque bannière par rapport à la référence, sur les produits qui ont un prix de référence
         const ecartsRef = stats
           .map((s) => {
@@ -315,6 +336,30 @@ export default function Analyse({ historique, vueInitiale, visiteId, refuse, seu
                   );
                 })}
                 <div className="muted" style={{ marginTop: 8 }}>Moyenne des écarts produit par produit, au dernier prix relevé. Panier = promo comprise, Régulier = prix régulier seulement. Rouge = moins cher que {base}. Touche une bannière pour le détail par catégorie.</div>
+              </div>
+            )}
+            {baseCirc && circ.length > 0 && (
+              <div className="card">
+                <h2>En circulaire face à {baseCirc}</h2>
+                {circ.map((c) => (
+                  <div key={c.banniere} className="indice">
+                    <PastilleBanniere banniere={c.banniere} doux />
+                    <div className="grow">
+                      <div className="row between">
+                        <b>{c.banniere}</b>
+                        <b className={c.pct === null ? "" : couleur(c.pct)}>{c.pct === null ? "—" : pct(c.pct)}</b>
+                      </div>
+                      <div className="muted">
+                        {c.n > 0 ? `${c.n} offre${c.n > 1 ? "s" : ""} comparée${c.n > 1 ? "s" : ""}` : "aucune offre comparable"}
+                        {c.sansEcart > 0 ? ` · ${c.sansEcart} sans écart (format inconnu)` : ""}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="source-circ">
+                  <img src="/bannieres/reebee.webp" alt="reebee" />
+                  <span>Prix des circulaires en cours (Flipp et reebee, source non officielle) des produits dont tu as cherché les promos, face au prix relevé chez {baseCirc}. Au prix par unité quand le format diffère. Seuls les produits en spécial comptent : ce n'est pas un indice de tout le panier.</span>
+                </div>
               </div>
             )}
             {stats.length > 0 && (
