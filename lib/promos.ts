@@ -48,7 +48,7 @@ const sansAccent = (t: string) => t.toLowerCase().normalize("NFD").replace(/[^a-
 const SITES: Record<string, (q: string) => string> = {
   maxi: (q) => `https://www.maxi.ca/fr/search?search-bar=${q}`,
   provigo: (q) => `https://www.provigo.ca/fr/search?search-bar=${q}`,
-  metro: (q) => `https://www.metro.ca/recherche?filter=${q}`,
+  metro: (q) => `https://www.metro.ca/epicerie-en-ligne/recherche?filter=${q}`,
   superc: (q) => `https://www.superc.ca/recherche?filter=${q}`,
   iga: (q) => `https://www.iga.net/fr/search?k=${q}`,
   walmart: (q) => `https://www.walmart.ca/fr/search?q=${q}`,
