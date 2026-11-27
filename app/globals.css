@@ -635,3 +635,9 @@ button.offre-liste .pill { flex: none; margin: 0; }
 /* Poignée des fenêtres du bas : zone de prise plus grande pour refermer en glissant vers le bas */
 .sheet .grip { position: relative; }
 .sheet .grip::after { content: ""; position: absolute; inset: -12px -120px -18px; }
+
+/* Écran de chargement : petits logos des bannières qui rebondissent à tour de rôle */
+.logos-rebond { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 300px; margin-top: 22px; }
+.logos-rebond img { width: 30px; height: 30px; padding: 3px; border-radius: 9px; background: #fff; object-fit: contain; box-shadow: var(--shadow); animation: rebond 1.3s ease-in-out infinite; }
+@keyframes rebond { 0%, 55%, 100% { transform: translateY(0); } 25% { transform: translateY(-11px); } 40% { transform: translateY(0); } 47% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .logos-rebond img { animation: none; } }
