@@ -76,6 +76,10 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
     else creee(data as Visite);
   }
 
+  // Une bannière choisie : la fenêtre descend jusqu'au bouton « Commencer ».
+  const bas = useRef<HTMLDivElement>(null);
+  const versLeBas = () => setTimeout(() => bas.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 60);
+
   async function supprimer() {
     if (!visite) return;
     const { data, error } = await supabaseBrowser().from("visites").delete().eq("id", visite.id).select("id");
@@ -104,7 +108,7 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
         <label>Bannière</label>
         <div className="tuiles">
           {BANNIERES.map((b, i) => (
-            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { touche.current = true; setReconnu(null); setAutre(false); setBanniere(b); }}>
+            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { touche.current = true; setReconnu(null); setAutre(false); setBanniere(b); versLeBas(); }}>
               {logoBanniere(b) ? (
                 <img className="logo" src={logoBanniere(b)!} alt="" />
               ) : (
@@ -124,7 +128,7 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
         <label>Date</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         {erreur && <div className="alert" style={{ marginTop: 12 }}>{erreur}</div>}
-        <div className="actions">
+        <div className="actions" ref={bas}>
           <button className="primary full" disabled={!banniere.trim()}>{visite ? "Enregistrer" : "Commencer"}</button>
           {fermer && <button type="button" className="full" onClick={fermer}>Annuler</button>}
           {visite && (
