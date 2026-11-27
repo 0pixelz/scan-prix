@@ -1,5 +1,5 @@
 // Bannières dont on a le logo (fichiers fournis dans public/bannieres).
-export const LOGOS_BANNIERES = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro", "superc", "pharmaprix", "adonis"];
+export const LOGOS_BANNIERES = ["iga", "walmart", "costco", "maxi", "dollarama", "provigo", "metro", "superc", "pharmaprix", "adonis", "jeancoutu"];
 
 /** Adresse du logo d'une bannière, ou null si on n'en a pas. */
 export function logoBanniere(banniere: string | null | undefined): string | null {

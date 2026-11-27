@@ -21,8 +21,8 @@ export async function magasinsProches(banniere: string, ici: { latitude: number;
   const lieux = (await rep.json()) as { name?: string; category?: string; lat: string; lon: string; address?: Record<string, string> }[];
   const vus = new Set<string>();
   return lieux
-    // Seulement des commerces (ou pharmacies) dont le nom commence par la bannière : pas de station de métro ni d'entrepôt.
-    .filter((l) => (l.category === "shop" || l.category === "amenity") && simple(l.name ?? "").startsWith(cle))
+    // Seulement des commerces (ou pharmacies) qui portent le nom de la bannière : pas de station de métro ni d'entrepôt.
+    .filter((l) => (l.category === "shop" || l.category === "amenity") && simple(l.name ?? "").includes(cle))
     .map((l) => {
       const a = l.address ?? {};
       const ville = a.city ?? a.town ?? a.village ?? a.municipality ?? a.suburb ?? "";

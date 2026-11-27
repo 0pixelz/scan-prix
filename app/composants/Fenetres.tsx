@@ -80,20 +80,35 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
   // Une bannière choisie : on propose ses magasins les plus proches (OpenStreetMap). Le plus proche remplit le champ
   // s'il est vide ou s'il venait déjà d'une proposition ; ce que l'utilisateur a tapé lui-même n'est jamais remplacé.
   const [proches, setProches] = useState<MagasinProche[]>([]);
-  const propose = useRef<string | null>(null);
+  const propose = useRef<string | null>(visite?.magasin ?? null); // magasin venu d'une proposition ou de l'ancienne bannière
+  const tape = useRef(false); // vrai dès que le nom du magasin est tapé à la main
   const demande = useRef(0);
+  /** Position pour chercher les magasins : celle déjà lue, celle gardée avec la visite, sinon une lecture à la demande. */
+  const ou = async (): Promise<{ latitude: number; longitude: number } | null> => {
+    if (position) return position;
+    if (visite && typeof visite.latitude === "number" && typeof visite.longitude === "number") return { latitude: visite.latitude, longitude: visite.longitude };
+    if (!navigator.geolocation) return null;
+    return new Promise((resoudre) => navigator.geolocation.getCurrentPosition(
+      (p) => resoudre({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
+      () => resoudre(null),
+      { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 },
+    ));
+  };
   async function proposerMagasins(b: string) {
     setProches([]);
-    if (visite || !position) return;
     const n = ++demande.current;
-    const liste = await magasinsProches(b, position).catch(() => []);
+    // Le magasin affiché appartenait à l'ancienne bannière : on le retire tout de suite, sauf s'il a été tapé à la main.
+    const remplacer = !tape.current;
+    if (remplacer) setMagasin("");
+    const ici = await ou();
+    if (n !== demande.current || !ici) return;
+    const liste = await magasinsProches(b, ici).catch(() => []);
     if (n !== demande.current) return;
     setProches(liste);
-    setMagasin((actuel) => {
-      if (!liste.length || (actuel.trim() && actuel !== propose.current)) return actuel;
+    if (remplacer && liste.length) {
       propose.current = liste[0].nom;
-      return liste[0].nom;
-    });
+      setMagasin((actuel) => (actuel.trim() ? actuel : liste[0].nom));
+    }
   }
 
   // Une bannière choisie : la fenêtre descend jusqu'au bouton « Commencer ».
@@ -128,7 +143,7 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
         <label>Bannière</label>
         <div className="tuiles">
           {BANNIERES.map((b, i) => (
-            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { touche.current = true; setReconnu(null); setAutre(false); setBanniere(b); versLeBas(); proposerMagasins(b); }}>
+            <button type="button" key={b} className={!autre && banniere === b ? "on" : ""} aria-pressed={!autre && banniere === b} onClick={() => { touche.current = true; setReconnu(null); const change = autre || banniere !== b; setAutre(false); setBanniere(b); versLeBas(); if (change) proposerMagasins(b); }}>
               {logoBanniere(b) ? (
                 <img className="logo" src={logoBanniere(b)!} alt="" />
               ) : (
@@ -137,18 +152,18 @@ export function NouvelleVisite({ visite, connues, fermer, creee, supprimee }: {
               {b}
             </button>
           ))}
-          <button type="button" className={autre ? "on" : ""} aria-pressed={autre} onClick={() => { touche.current = true; setReconnu(null); setAutre(true); setBanniere(""); }}>
+          <button type="button" className={autre ? "on" : ""} aria-pressed={autre} onClick={() => { touche.current = true; setReconnu(null); setAutre(true); setBanniere(""); demande.current++; setProches([]); if (!tape.current) setMagasin(""); }}>
             <span style={{ "--h": 215 } as React.CSSProperties}>+</span>
             Autre
           </button>
         </div>
         {autre && <input style={{ marginTop: 10 }} value={banniere} onChange={(e) => setBanniere(e.target.value)} placeholder="Nom de la bannière" autoFocus={!visite} />}
         <label>Magasin (ville, succursale)</label>
-        <input value={magasin} onChange={(e) => { touche.current = true; setMagasin(e.target.value); }} placeholder="Ex. Mirabel" />
+        <input value={magasin} onChange={(e) => { touche.current = true; tape.current = e.target.value.trim() !== ""; setMagasin(e.target.value); }} placeholder="Ex. Mirabel" />
         {proches.length > 0 && (
           <div className="proches">
             {proches.map((m) => (
-              <button type="button" key={m.nom} className={magasin === m.nom ? "on" : ""} onClick={() => { propose.current = m.nom; setMagasin(m.nom); }}>
+              <button type="button" key={m.nom} className={magasin === m.nom ? "on" : ""} onClick={() => { propose.current = m.nom; tape.current = false; setMagasin(m.nom); }}>
                 {m.nom} <small>{distanceLisible(m.distance)}</small>
               </button>
             ))}
