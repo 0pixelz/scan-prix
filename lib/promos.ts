@@ -53,7 +53,7 @@ const SITES: Record<string, (q: string) => string> = {
   iga: (q) => `https://www.iga.net/fr/search?k=${q}`,
   walmart: (q) => `https://www.walmart.ca/fr/search?q=${q}`,
   costco: (q) => `https://www.costco.ca/CatalogSearch?dept=All&langId=-25&keyword=${q}`,
-  pharmaprix: (q) => `https://www.pharmaprix.ca/fr/search?text=${q}`, // site québécois (Shoppers Drug Mart ailleurs au Canada)
+  pharmaprix: (q) => `https://www.pharmaprix.ca/search?text=${q}&lang=fr`, // site québécois (Shoppers Drug Mart ailleurs au Canada)
 };
 
 // Bannières absentes du Québec : leurs offres sont écartées, même si une circulaire d'une autre province remonte.
