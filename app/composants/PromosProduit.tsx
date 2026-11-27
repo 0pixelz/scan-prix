@@ -47,8 +47,10 @@ export default function PromosProduit({ scan, banniere, codePostal, seuil, lectu
       try { sessionStorage.setItem(cle, JSON.stringify(g)); } catch { /* stockage indisponible */ }
       // Gardées pour la liste des prix, les alertes, l'Excel et le rapport.
       if (!lecture) {
-        const anciennes = sb.from("promos_circulaires").delete().eq("visite_id", scan.visite_id).eq("produit", scan.produit ?? "");
-        const { error: e1 } = await (scan.marque ? anciennes.eq("marque", scan.marque) : anciennes.is("marque", null));
+        // Les anciennes offres de ce produit sont remplacées, même si son nom a été corrigé depuis : la fiche et la
+        // liste des prix montrent ainsi les mêmes concurrents.
+        const anciennes = sb.from("promos_circulaires").delete().eq("visite_id", scan.visite_id);
+        const { error: e1 } = await (scan.cup ? anciennes.eq("cup", scan.cup) : anciennes.eq("produit", scan.produit ?? ""));
         const lignes = offres.map((o) => {
           const e = ecartPromo(prix, scan.format, o);
           return {

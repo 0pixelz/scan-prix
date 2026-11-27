@@ -187,6 +187,7 @@ Pour chaque paire (produit, offre), dis si l'offre concerne le même produit :
 - proche : même marque et même type de produit, mais le format ou la variété diffère, ou le format n'est pas écrit dans l'offre. Comparable au prix par unité.
 - non : autre marque, autre type de produit, ou offre trop vague pour être comparée.
 format : le format de l'offre s'il est écrit dans son nom (ex. « 454 g »), sinon null.
+Une offre qui regroupe plusieurs produits (« A ou B ou C », « A, B ») compte dès que l'un d'eux est le produit ou sa marque et son type : juge sur celui-là, et réponds proche si le format ou la variété n'est pas précisé pour lui.
 Dans le doute entre proche et non, réponds non.
 Appelle toujours l'outil juger, une seule fois, avec toutes les paires reçues.`;
 
