@@ -373,7 +373,7 @@ label.case input { width: 22px; height: 22px; min-height: 0; padding: 0; flex: n
 .barres i:nth-child(odd) { opacity: 0.85; }
 .laser {
   position: absolute; top: 6px; bottom: 6px; left: 0; width: 3px; border-radius: 3px;
-  background: var(--accent); box-shadow: 0 0 16px 4px color-mix(in srgb, var(--accent) 65%, transparent);
+  background: #e1251b; box-shadow: 0 0 16px 4px color-mix(in srgb, #e1251b 65%, transparent);
   animation: laser 1.6s ease-in-out infinite alternate;
 }
 @keyframes laser { from { left: 10px; } to { left: calc(100% - 13px); } }
