@@ -33,7 +33,8 @@ const REGLES = `Règles :
 - points : nombre de points de fidélité offerts à l'achat (« 500 points » -> 500), sinon null.
 - points_details : le programme et la condition tels qu'écrits (ex. « 1 000 points Moi à l'achat de 2 »), sinon null.
 - Dates au format AAAA-MM-JJ. Si l'année n'est pas imprimée, utilise celle de la date du jour fournie.
-- cup : uniquement les chiffres du code-barres (CUP/UPC). code_article : numéro d'article ou SKU interne.
+- cup : uniquement les chiffres du code-barres (CUP/UPC), souvent précédés de « CUP » ou « UPC ».
+- code_article : le numéro d'article interne du magasin. Chez Metro et Super C, c'est le code SAP : un nombre seul, le plus souvent de 8 chiffres, imprimé près du code-barres ou juste en dessous (ex. 15224811). Ne prends jamais à sa place un code avec des tirets (ex. 020721-00011-0803), une date, un numéro d'emplacement (« Emp 7 ») ni un code de planogramme (ex. C18120). Si aucun numéro ne convient, null.
 - prix_unitaire : le prix par unité de mesure tel qu'affiché (ex. « 1,25 $ / 100 g »).
 - confiance : « haute », « moyenne » ou « basse » selon la lisibilité.
 - categorie : une seule parmi : Fruits et légumes, Viandes et poissons, Produits laitiers et œufs, Boulangerie, Épicerie, Surgelés, Boissons, Collations et confiseries, Prêt-à-manger et charcuterie, Santé et beauté, Entretien ménager, Bébé, Animaux, Autre.
